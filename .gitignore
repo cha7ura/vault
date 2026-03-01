@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+*.egg
+.venv/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Data & cache (large audio/transcripts/benchmarks)
+pipeline/data/
+data/
+.firecrawl/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# SQLite
+*.db
+*.sqlite
+
+# Logs
+*.log
+
+# Lock files (pipeline uses uv.lock, dashboard uses package-lock.json)
+# These are committed — don't ignore them
+
+# Misc
+*.pem
+*.tsbuildinfo
+.vercel
+meili_data/
