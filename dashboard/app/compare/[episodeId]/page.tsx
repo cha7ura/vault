@@ -55,7 +55,7 @@ export default function ComparePage({
         const t = playerRef.current.getCurrentTime();
         if (typeof t === "number") setCurrentTime(t);
       }
-    }, 250);
+    }, 100);
   }, []);
 
   const stopPolling = useCallback(() => {
