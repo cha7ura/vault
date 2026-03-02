@@ -130,12 +130,15 @@ def diarize_with_pyannote(
         "pyannote/speaker-diarization-3.1",
         token=hf_token,
     )
-    pipeline.to(device)
+    import torch
+    pipeline.to(torch.device(device))
 
-    diarization = pipeline(str(audio_path))
+    output = pipeline(str(audio_path))
+    # PyAnnote 3.x returns DiarizeOutput; extract the Annotation object
+    annotation = getattr(output, "speaker_diarization", output)
 
     results: list[DiarizationSegment] = []
-    for turn, _track, speaker in diarization.itertracks(yield_label=True):
+    for turn, _track, speaker in annotation.itertracks(yield_label=True):
         results.append(
             DiarizationSegment(start=turn.start, end=turn.end, speaker=speaker)
         )
