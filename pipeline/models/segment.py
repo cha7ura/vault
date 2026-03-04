@@ -15,7 +15,7 @@ class Segment(Base):
     speaker: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tag: Mapped[str] = mapped_column(String(50), default="content")
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    diarizer: Mapped[str] = mapped_column(String(100), default="pyannote")
+    diarizer: Mapped[str] = mapped_column(String(100), default="whisper-diarization")
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 
     episode = relationship("Episode", back_populates="segments")

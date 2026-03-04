@@ -18,10 +18,12 @@ function HighlightedSegment({
   segment,
   currentTime,
   isActiveTurn,
+  onSeek,
 }: {
   segment: Segment;
   currentTime: number;
   isActiveTurn: boolean;
+  onSeek: (seconds: number) => void;
 }) {
   const words = useMemo(() => getWordTimings(segment), [segment]);
 
@@ -34,7 +36,13 @@ function HighlightedSegment({
     // Past segments in the active turn get subtle highlight to show they've been spoken
     const isPastInTurn = isActiveTurn && currentTime >= segment.end_time;
     return (
-      <span className={isPastInTurn ? "text-foreground/50" : ""}>
+      <span
+        className={`cursor-pointer hover:bg-muted/50 rounded-sm ${isPastInTurn ? "text-foreground/50" : ""}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSeek(segment.start_time);
+        }}
+      >
         {segment.text}{" "}
       </span>
     );
@@ -49,13 +57,17 @@ function HighlightedSegment({
         return (
           <span
             key={i}
-            className={
+            onClick={(e) => {
+              e.stopPropagation();
+              onSeek(w.start);
+            }}
+            className={`cursor-pointer ${
               isCurrent
                 ? "bg-yellow-400 text-black rounded-sm px-[1px] transition-colors duration-75"
                 : isPast
                   ? "bg-yellow-400/25 rounded-sm px-[1px]"
-                  : ""
-            }
+                  : "hover:bg-muted/50 rounded-sm"
+            }`}
           >
             {w.word}{" "}
           </span>
@@ -180,6 +192,7 @@ export function TranscriptPanel({
                         segment={seg}
                         currentTime={currentTime}
                         isActiveTurn={isActive}
+                        onSeek={onSeek}
                       />
                     ))}
                   </td>

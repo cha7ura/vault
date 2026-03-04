@@ -17,8 +17,7 @@ export default function ComparePage({
   const id = parseInt(episodeId, 10);
 
   const [episode, setEpisode] = useState<Episode | null>(null);
-  const [pyannoteSegments, setPyannoteSegments] = useState<Segment[]>([]);
-  const [whisperSegments, setWhisperSegments] = useState<Segment[]>([]);
+  const [segments, setSegments] = useState<Segment[]>([]);
   const [benchmarks, setBenchmarks] = useState<BenchmarkData[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -30,15 +29,13 @@ export default function ComparePage({
   useEffect(() => {
     async function load() {
       try {
-        const [ep, pySegs, wdSegs, bm] = await Promise.all([
+        const [ep, segs, bm] = await Promise.all([
           fetchEpisode(id),
-          fetchSegments(id, "pyannote"),
           fetchSegments(id, "whisper-diarization"),
           fetchBenchmarks(id),
         ]);
         setEpisode(ep);
-        setPyannoteSegments(pySegs);
-        setWhisperSegments(wdSegs);
+        setSegments(segs);
         setBenchmarks(bm);
       } catch (e: any) {
         setError(e.message);
@@ -82,6 +79,7 @@ export default function ComparePage({
   const seekTo = useCallback((seconds: number) => {
     if (playerRef.current) {
       playerRef.current.seekTo(seconds, true);
+      playerRef.current.playVideo();
       setCurrentTime(seconds);
     }
   }, []);
@@ -102,8 +100,7 @@ export default function ComparePage({
     );
   }
 
-  const pyBenchmark = benchmarks.find((b) => b.diarizer === "pyannote") ?? null;
-  const wdBenchmark = benchmarks.find((b) => b.diarizer === "whisper-diarization") ?? null;
+  const benchmark = benchmarks.find((b) => b.diarizer === "whisper-diarization") ?? null;
 
   return (
     <div className="flex flex-col h-screen">
@@ -134,26 +131,15 @@ export default function ComparePage({
         </div>
       </div>
 
-      {/* Transcript Panels */}
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-0 border-t mt-4 min-h-0">
-        <div className="border-r min-h-0 flex flex-col">
-          <TranscriptPanel
-            title="PyAnnote"
-            segments={pyannoteSegments}
-            currentTime={currentTime}
-            benchmark={pyBenchmark}
-            onSeek={seekTo}
-          />
-        </div>
-        <div className="min-h-0 flex flex-col">
-          <TranscriptPanel
-            title="whisper-diarization"
-            segments={whisperSegments}
-            currentTime={currentTime}
-            benchmark={wdBenchmark}
-            onSeek={seekTo}
-          />
-        </div>
+      {/* Transcript Panel */}
+      <div className="flex-1 border-t mt-4 min-h-0">
+        <TranscriptPanel
+          title="Transcript"
+          segments={segments}
+          currentTime={currentTime}
+          benchmark={benchmark}
+          onSeek={seekTo}
+        />
       </div>
     </div>
   );

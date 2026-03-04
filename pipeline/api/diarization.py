@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from pipeline.db import get_db
 from pipeline.models import Episode, Segment, Benchmark
-from pipeline.core.diarizer_pyannote import DiarizedTranscript
+from pipeline.core.diarizer_whisper import DiarizedTranscript
 
 router = APIRouter(prefix="/api/episodes/{episode_id}/diarization", tags=["diarization"])
 
@@ -14,7 +14,7 @@ def store_diarization_result(
     episode_id: int,
     transcript: DiarizedTranscript,
     intro_end_at: float = 0.0,
-    diarizer: str = "pyannote",
+    diarizer: str = "whisper-diarization",
 ) -> list[Segment]:
     """Store diarization segments in the database, scoped by diarizer."""
     db.query(Segment).filter(

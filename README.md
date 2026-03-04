@@ -1,10 +1,10 @@
 # Vault
 
-Local-first YouTube podcast diarization and comparison dashboard. Run speaker diarization with multiple engines (PyAnnote, whisper-diarization) and compare outputs side-by-side with synchronized video playback.
+Local-first YouTube podcast diarization and knowledge extraction platform. Downloads podcast audio, identifies speakers (whisper-diarization), and provides an interactive transcript dashboard with synchronized video playback.
 
-## Quick Start (Dashboard Only)
+## Quick Start
 
-The repo includes a pre-seeded SQLite database with diarization results for the DOAC Ozempic episode. Clone and run to compare immediately — no diarization needed.
+The repo includes a pre-seeded SQLite database with diarization results. Clone and run to view immediately.
 
 ```bash
 git clone https://github.com/cha7ura/vault.git
@@ -29,13 +29,13 @@ npm install
 npm run dev
 ```
 
-### 3. Open the Comparison Page
+### 3. Open the Transcript Page
 
 ```
 http://localhost:3001/compare/1
 ```
 
-Both transcript panels (PyAnnote and whisper-diarization) will load with real data. Play the YouTube video to see word-by-word highlighting and auto-scrolling.
+Click any word or segment to seek the video to that point and start playing. Words highlight yellow in real-time as the video plays.
 
 ## Architecture
 
@@ -49,12 +49,11 @@ vault/
 │   │   ├── api/
 │   │   │   └── diarization.py  # Segments + benchmarks API
 │   │   └── core/
-│   │       ├── diarizer_pyannote.py   # PyAnnote 3.x wrapper
-│   │       └── diarizer_whisper.py    # whisper-diarization wrapper
+│   │       └── diarizer_whisper.py  # whisper-diarization wrapper
 │   └── pyproject.toml
 ├── dashboard/             # Next.js 15 frontend
 │   ├── app/
-│   │   └── compare/[episodeId]/page.tsx  # Comparison page
+│   │   └── compare/[episodeId]/page.tsx  # Transcript page
 │   ├── components/
 │   │   └── transcript-panel.tsx          # Speaker-grouped transcript with word highlight
 │   └── lib/
@@ -64,52 +63,35 @@ vault/
 ├── vendor/
 │   └── whisper-diarization/  # Patched MahmoudAshraf97/whisper-diarization
 ├── data/
-│   └── vault.db           # Pre-seeded SQLite (508KB)
+│   └── vault.db           # Pre-seeded SQLite
 └── README.md
 ```
 
 ## Pre-seeded Data
 
-| Diarizer | Segments | Speakers | Duration |
-|----------|----------|----------|----------|
-| PyAnnote 3.x (MPS) | 1,614 | 2 | ~9 min |
-| whisper-diarization (NeMo MSDD, CPU) | 942 | 2 | ~4h 42min |
-
-Episode: DOAC — "The Fasting Doctor" (youtube_id: `jDG1m_b5Ih0`)
+| Segments | Speakers | Episode |
+|----------|----------|---------|
+| 942 | 2 | DOAC — "The Fasting Doctor" (`jDG1m_b5Ih0`) |
 
 ## Running Diarization
-
-To diarize new episodes, you need additional dependencies.
-
-### PyAnnote
-
-```bash
-cd pipeline
-pip install -e ".[diarize-pyannote]"
-```
-
-Requires a HuggingFace token with access to `pyannote/speaker-diarization-3.1`.
-
-### whisper-diarization
 
 ```bash
 cd pipeline
 pip install -e ".[diarize-whisper]"
 
-# Run from the vendor directory
 cd ../vendor/whisper-diarization
 python diarize.py -a /path/to/audio.wav --no-stem --device cpu
 ```
 
-The patched `diarize.py` skips CTC forced alignment (crash-prone) and uses faster-whisper's native word timestamps instead. Outputs `.txt` and `.srt` files next to the input audio.
+The patched `diarize.py` uses faster-whisper's native word timestamps (CTC alignment removed). Outputs `.txt` and `.srt` files next to the input audio.
 
 ## Dashboard Features
 
-- YouTube player with synchronized transcript panels
-- Side-by-side comparison of two diarization engines
+- YouTube player with synchronized transcript
 - Word-by-word yellow highlighting during playback
+- Click any word to seek video to that timestamp and play
+- Click any speaker turn row to jump to that section
 - Auto-scroll on speaker turn change
-- Click any turn to seek the video
 - Speaker grouping (consecutive segments merged into turns)
 
 ## Tech Stack
@@ -118,8 +100,7 @@ The patched `diarize.py` skips CTC forced alignment (crash-prone) and uses faste
 |-----------|-----------|
 | API | Python, FastAPI, SQLAlchemy, SQLite |
 | Dashboard | Next.js 15, React 19, TailwindCSS v4, react-youtube |
-| PyAnnote | pyannote.audio 3.x, faster-whisper |
-| whisper-diarization | faster-whisper, NeMo MSDD, demucs |
+| Diarization | faster-whisper, NeMo MSDD, demucs |
 
 ## API Endpoints
 
@@ -127,7 +108,6 @@ The patched `diarize.py` skips CTC forced alignment (crash-prone) and uses faste
 GET  /health
 GET  /api/episodes
 GET  /api/episodes/{id}
-GET  /api/episodes/{id}/diarization/segments?diarizer=pyannote
 GET  /api/episodes/{id}/diarization/segments?diarizer=whisper-diarization
 GET  /api/episodes/{id}/diarization/benchmarks
 PATCH /api/episodes/{id}/diarization/segments/{segment_id}
