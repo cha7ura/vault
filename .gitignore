@@ -29,8 +29,6 @@ Thumbs.db
 .env*.local
 
 # SQLite
-*.db
-*.sqlite
 
 # Logs
 *.log
