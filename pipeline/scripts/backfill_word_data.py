@@ -14,8 +14,14 @@ import json
 import sqlite3
 from pathlib import Path
 
-AUDIO_PATH = Path(__file__).resolve().parents[2] / "data" / "audio" / "doac" / "jDG1m_b5Ih0_16k.wav"
+AUDIO_PATH = Path(__file__).resolve().parents[1] / "data" / "audio" / "doac" / "jDG1m_b5Ih0_16k.wav"
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "vault.db"
+
+# Fallback: check alternate locations
+if not AUDIO_PATH.exists():
+    _alt = Path(__file__).resolve().parents[2] / "data" / "audio" / "doac" / "jDG1m_b5Ih0_16k.wav"
+    if _alt.exists():
+        AUDIO_PATH = _alt
 WHISPER_MODEL = "medium.en"
 BATCH_SIZE = 8
 
