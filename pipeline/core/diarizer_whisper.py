@@ -7,6 +7,7 @@ runner (``run_whisper_diarization``) requires the external tool installed.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -18,12 +19,22 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 @dataclass
+class WordTiming:
+    """A single word with its timestamp and ASR confidence score."""
+    text: str
+    start: float
+    end: float
+    score: float | None = None
+
+
+@dataclass
 class TranscriptSegment:
     """A single timestamped text segment with optional speaker label."""
     start: float
     end: float
     text: str
     speaker: str | None = None
+    words: list[WordTiming] = field(default_factory=list)
 
 
 @dataclass
@@ -79,6 +90,49 @@ def parse_whisper_diarization_output(raw_output: str) -> DiarizedTranscript:
     )
 
 
+def parse_whisper_diarization_json(json_path: str | Path) -> DiarizedTranscript:
+    """Parse the JSON output from whisper-diarization.
+
+    The JSON file contains per-segment data with embedded per-word timings
+    and confidence scores. Format::
+
+        [{"speaker": "Speaker 0", "start": 0.54, "end": 6.3,
+          "text": "Hello world", "words": [{"text": "Hello", "start": 0.54,
+          "end": 0.72, "score": 0.98}, ...]}]
+    """
+    data = json.loads(Path(json_path).read_text(encoding="utf-8"))
+
+    segments: list[TranscriptSegment] = []
+    speakers_set: set[str] = set()
+
+    for entry in data:
+        words = [
+            WordTiming(
+                text=w["text"],
+                start=w["start"],
+                end=w["end"],
+                score=w.get("score"),
+            )
+            for w in entry.get("words", [])
+        ]
+        seg = TranscriptSegment(
+            start=entry["start"],
+            end=entry["end"],
+            text=entry["text"],
+            speaker=entry.get("speaker"),
+            words=words,
+        )
+        segments.append(seg)
+        if seg.speaker:
+            speakers_set.add(seg.speaker)
+
+    return DiarizedTranscript(
+        segments=segments,
+        speakers=sorted(speakers_set),
+        full_text=" ".join(s.text for s in segments),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Subprocess runner — NOT tested in unit tests
 # ---------------------------------------------------------------------------
@@ -110,9 +164,13 @@ def run_whisper_diarization(
     if result.returncode != 0:
         raise RuntimeError(f"whisper-diarization failed: {result.stderr}")
 
-    # whisper-diarization writes output to a .txt file next to the audio
-    output_path = audio_path.with_suffix(".txt")
-    if output_path.exists():
-        return parse_whisper_diarization_output(output_path.read_text())
+    # Prefer JSON (has per-word data) over TXT (segment-level only)
+    json_output = audio_path.with_suffix(".json")
+    if json_output.exists():
+        return parse_whisper_diarization_json(json_output)
+
+    txt_output = audio_path.with_suffix(".txt")
+    if txt_output.exists():
+        return parse_whisper_diarization_output(txt_output.read_text())
 
     return parse_whisper_diarization_output(result.stdout)

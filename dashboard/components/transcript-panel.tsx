@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { formatTime } from "@/lib/utils";
-import type { Segment, BenchmarkData, SpeakerTurn } from "@/lib/types";
+import type { Segment, BenchmarkData, SpeakerTurn, WordTiming } from "@/lib/types";
 import { groupBySpeaker, getWordTimings } from "@/lib/types";
 
 interface TranscriptPanelProps {
@@ -26,6 +26,12 @@ function HighlightedSegment({
   onSeek: (seconds: number) => void;
 }) {
   const words = useMemo(() => getWordTimings(segment), [segment]);
+
+  // Build per-word YouTube text lookup from segment.youtube_text
+  const ytWords = useMemo(() => {
+    if (!segment.youtube_text) return null;
+    return segment.youtube_text.split(/\s+/).filter(Boolean);
+  }, [segment.youtube_text]);
 
   const isActiveSegment =
     isActiveTurn &&
@@ -53,6 +59,7 @@ function HighlightedSegment({
       {words.map((w, i) => {
         const isPast = currentTime >= w.end;
         const isCurrent = currentTime >= w.start && currentTime < w.end;
+        const isLowConfidence = w.score != null && w.score < 0.7;
 
         return (
           <span
@@ -61,13 +68,39 @@ function HighlightedSegment({
               e.stopPropagation();
               onSeek(w.start);
             }}
+            title={
+              w.score != null
+                ? (() => {
+                    let tip = `Confidence: ${Math.round(w.score * 100)}%`;
+                    const ytWord = ytWords?.[i];
+                    if (
+                      ytWord &&
+                      ytWord.toLowerCase() !== w.word.replace(/[.,!?;:]+$/, "").toLowerCase()
+                    ) {
+                      tip += ` | YouTube: '${ytWord}'`;
+                    }
+                    return tip;
+                  })()
+                : undefined
+            }
             className={`cursor-pointer ${
               isCurrent
-                ? "bg-yellow-400 text-black rounded-sm px-[1px] transition-colors duration-75"
+                ? isLowConfidence
+                  ? "bg-red-400 text-black rounded-sm px-[1px] transition-colors duration-75"
+                  : "bg-yellow-400 text-black rounded-sm px-[1px] transition-colors duration-75"
                 : isPast
                   ? "bg-yellow-400/25 rounded-sm px-[1px]"
                   : "hover:bg-muted/50 rounded-sm"
             }`}
+            style={
+              isLowConfidence && !isCurrent
+                ? {
+                    textDecoration: "underline wavy",
+                    textDecorationColor: "rgb(248 113 113)",
+                    textUnderlineOffset: "3px",
+                  }
+                : undefined
+            }
           >
             {w.word}{" "}
           </span>

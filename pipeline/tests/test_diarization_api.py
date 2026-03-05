@@ -47,6 +47,42 @@ def test_store_diarization_segments(db):
     assert segments[1].speaker == "Speaker 1"
 
 
+def test_store_diarization_with_words(db):
+    """Verify word-level data is stored as JSON."""
+    channel = Channel(name="DOAC", slug="doac", youtube_id="@DOAC")
+    db.add(channel)
+    db.commit()
+    episode = Episode(channel_id=channel.id, youtube_id="abc123", title="Test", status="diarizing")
+    db.add(episode)
+    db.commit()
+
+    from pipeline.core.diarizer_whisper import TranscriptSegment, DiarizedTranscript, WordTiming
+    from pipeline.api.diarization import store_diarization_result
+
+    transcript = DiarizedTranscript(
+        segments=[
+            TranscriptSegment(
+                start=0.0, end=5.0, text="Hello world", speaker="Speaker 0",
+                words=[
+                    WordTiming(text="Hello", start=0.0, end=0.5, score=0.98),
+                    WordTiming(text="world", start=0.5, end=1.0, score=0.42),
+                ],
+            ),
+        ],
+        speakers=["Speaker 0"],
+        full_text="Hello world",
+    )
+
+    store_diarization_result(db, episode.id, transcript)
+
+    seg = db.query(Segment).filter(Segment.episode_id == episode.id).first()
+    assert seg.words is not None
+    assert len(seg.words) == 2
+    assert seg.words[0]["text"] == "Hello"
+    assert seg.words[0]["score"] == 0.98
+    assert seg.words[1]["score"] == 0.42
+
+
 def test_store_segments_replaces_existing(db):
     """Verify re-storing replaces existing segments for the same diarizer."""
     channel = Channel(name="DOAC", slug="doac", youtube_id="@DOAC")

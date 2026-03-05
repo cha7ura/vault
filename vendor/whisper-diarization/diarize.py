@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import re
@@ -293,11 +294,51 @@ with open(txt_path, "w", encoding="utf-8-sig") as f:
 with open(srt_path, "w", encoding="utf-8-sig") as srt:
     write_srt(ssm, srt)
 
+# ---- Write JSON with per-word data ----
+json_path = f"{os.path.splitext(args.audio)[0]}.json"
+
+# Walk wsm (word-speaker mapping) and ssm (sentence-speaker mapping) in parallel
+# to group words back into their sentences, preserving per-word scores.
+json_segments = []
+wsm_idx = 0
+for sentence in ssm:
+    seg_words = []
+    sent_start_ms = sentence["start_time"]
+    sent_end_ms = sentence["end_time"]
+    # Collect words that fall within this sentence's time range
+    while wsm_idx < len(wsm):
+        w = wsm[wsm_idx]
+        # Word belongs to this sentence if its start_time is within range
+        if w["start_time"] >= sent_start_ms and w["start_time"] <= sent_end_ms:
+            seg_words.append({
+                "text": w["word"],
+                "start": round(w["start_time"] / 1000, 3),
+                "end": round(w["end_time"] / 1000, 3),
+                "score": w.get("score"),
+            })
+            wsm_idx += 1
+        elif w["start_time"] > sent_end_ms:
+            break
+        else:
+            wsm_idx += 1
+
+    json_segments.append({
+        "speaker": sentence["speaker"],
+        "start": round(sent_start_ms / 1000, 3),
+        "end": round(sent_end_ms / 1000, 3),
+        "text": sentence["text"].strip(),
+        "words": seg_words,
+    })
+
+with open(json_path, "w", encoding="utf-8") as jf:
+    json.dump(json_segments, jf, ensure_ascii=False, indent=2)
+
 cleanup(temp_path)
 
 _step(f"STEP 5/5: Output written in {time.time() - t5:.1f}s")
 _step(f"  TXT: {txt_path}")
 _step(f"  SRT: {srt_path}")
+_step(f"  JSON: {json_path}")
 
 # Count speakers
 speakers = set()

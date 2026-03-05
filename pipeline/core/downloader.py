@@ -76,6 +76,37 @@ def download_audio(video_id: str, output_dir: Path) -> Path:
     return output_dir / f"{video_id}.wav"
 
 
+def download_youtube_subs(
+    video_id: str, output_dir: Path, lang: str = "en"
+) -> Path | None:
+    """Download YouTube auto-generated subtitles in JSON3 format.
+
+    Returns the path to the downloaded .json3 file, or None if no
+    auto-captions are available for the requested language.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_template = str(output_dir / f"{video_id}")
+    opts = {
+        "writeautomaticsub": True,
+        "subtitlesformat": "json3",
+        "subtitleslangs": [lang],
+        "skip_download": True,
+        "outtmpl": output_template,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.extract_info(
+            f"https://www.youtube.com/watch?v={video_id}", download=True
+        )
+
+    # yt-dlp writes subtitle as: {video_id}.{lang}.json3
+    sub_path = output_dir / f"{video_id}.{lang}.json3"
+    if sub_path.exists():
+        return sub_path
+    return None
+
+
 def list_channel_videos(
     channel_url: str, limit: int | None = None
 ) -> list[dict[str, Any]]:

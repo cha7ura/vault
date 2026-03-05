@@ -268,7 +268,10 @@ def get_words_speaker_mapping(wrd_ts, spk_ts, word_anchor_option="start"):
             s, e, sp = spk_ts[turn_idx]
             if turn_idx == len(spk_ts) - 1:
                 e = get_word_ts_anchor(ws, we, option="end")
-        wrd_spk_mapping.append({"word": wrd, "start_time": ws, "end_time": we, "speaker": sp})
+        wrd_spk_mapping.append({
+            "word": wrd, "start_time": ws, "end_time": we,
+            "speaker": sp, "score": wrd_dict.get("score"),
+        })
     return wrd_spk_mapping
 
 

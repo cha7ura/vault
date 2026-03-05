@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from sqlalchemy import String, Text, Float, ForeignKey
+from sqlalchemy import String, Text, Float, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pipeline.db import Base
 
@@ -15,6 +15,8 @@ class Segment(Base):
     speaker: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tag: Mapped[str] = mapped_column(String(50), default="content")
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    words: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    youtube_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     diarizer: Mapped[str] = mapped_column(String(100), default="whisper-diarization")
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
 

@@ -1,3 +1,10 @@
+export interface WordData {
+  text: string;
+  start: number;
+  end: number;
+  score: number | null;
+}
+
 export interface Segment {
   id: number;
   start_time: number;
@@ -5,6 +12,8 @@ export interface Segment {
   text: string;
   speaker: string | null;
   tag: string;
+  words?: WordData[] | null;
+  youtube_text?: string | null;
   diarizer: string;
 }
 
@@ -34,11 +43,12 @@ export interface SpeakerTurn {
   endTime: number;
 }
 
-/** Approximate word timing derived from segment-level timestamps. */
+/** Word timing — real from API or interpolated from segment timestamps. */
 export interface WordTiming {
   word: string;
   start: number;
   end: number;
+  score?: number | null;
 }
 
 const SPEAKER_COLORS = [
@@ -111,8 +121,19 @@ export function groupBySpeaker(segments: Segment[]): SpeakerTurn[] {
   return turns;
 }
 
-/** Interpolate word positions within a segment's time range. */
+/** Use real word timestamps when available, fall back to interpolation. */
 export function getWordTimings(segment: Segment): WordTiming[] {
+  // Use real word-level data from the API if available
+  if (segment.words && segment.words.length > 0) {
+    return segment.words.map((w) => ({
+      word: w.text,
+      start: w.start,
+      end: w.end,
+      score: w.score,
+    }));
+  }
+
+  // Fallback: interpolate word positions from segment timestamps
   const words = segment.text.split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
 
