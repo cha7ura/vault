@@ -185,8 +185,11 @@ else:
     )
 
 # Collect word timestamps directly from faster-whisper (skip CTC forced alignment)
+audio_duration = len(audio_waveform) / 16000
 word_timestamps = []
 full_transcript_parts = []
+seg_count = 0
+last_pct = -1
 for segment in transcript_segments:
     full_transcript_parts.append(segment.text)
     if segment.words:
@@ -197,6 +200,12 @@ for segment in transcript_segments:
                 "end": word.end,
                 "score": word.probability,
             })
+    seg_count += 1
+    pct = int((segment.end / audio_duration) * 100) if audio_duration > 0 else 0
+    pct = min(pct, 100)
+    if pct >= last_pct + 5:
+        _step(f"  Transcribing... {pct}% ({segment.end:.0f}s / {audio_duration:.0f}s)")
+        last_pct = pct
 
 full_transcript = "".join(full_transcript_parts)
 
@@ -212,15 +221,17 @@ torch.cuda.empty_cache()
 _step(f"STEP 3/5: Loading {args.diarizer.upper()} diarization model...")
 t3 = time.time()
 
+diarizer_device = args.device
+
 if args.diarizer == "msdd":
     from diarization import MSDDDiarizer
 
-    diarizer_model = MSDDDiarizer(device=args.device)
+    diarizer_model = MSDDDiarizer(device=diarizer_device)
 
 elif args.diarizer == "sortformer":
     from diarization import SortformerDiarizer
 
-    diarizer_model = SortformerDiarizer(device=args.device)
+    diarizer_model = SortformerDiarizer(device=diarizer_device)
 
 _step(f"  Diarizer loaded in {time.time() - t3:.1f}s")
 _step("STEP 3/5: Running speaker diarization...")
@@ -248,7 +259,10 @@ if info.language in punct_model_langs:
 
     words_list = list(map(lambda x: x["word"], wsm))
 
-    labled_words = punct_model.predict(words_list, chunk_size=230)
+    try:
+        labled_words = punct_model.predict(words_list, chunk_size=230)
+    except TypeError:
+        labled_words = punct_model.predict(words_list)
 
     ending_puncts = ".?!"
     model_puncts = ".,;:!?"
