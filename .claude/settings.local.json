@@ -20,7 +20,8 @@
       "Bash(npm config:*)",
       "Bash(pip show:*)",
       "Bash(cat:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(git:*)"
     ]
   }
 }
