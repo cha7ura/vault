@@ -23,37 +23,33 @@ export function EpisodeCard({ episode, channelSlug }: EpisodeCardProps) {
     ? Math.floor(episode.duration_seconds / 60)
     : null;
 
-  const href = channelSlug 
-    ? `/${channelSlug}/episodes/${episode.id}`
-    : `/episode/${episode.id}`;
+  const href = channelSlug
+    ? `/${channelSlug}/episodes/${episode.youtube_id}`
+    : `/episodes/${episode.youtube_id}`;
+
+  const thumbnailUrl = episode.thumbnail_url
+    || `https://img.youtube.com/vi/${episode.youtube_id}/hqdefault.jpg`;
 
   return (
     <Link href={href}>
       <Card className="overflow-hidden hover:shadow-lg transition-shadow group">
-        {episode.thumbnail_url && (
-          <div className="relative w-full aspect-video">
-            <Image
-              src={episode.thumbnail_url}
-              alt={episode.title}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-            {durationMinutes && (
-              <span className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
-                {durationMinutes} min
-              </span>
-            )}
-          </div>
-        )}
+        <div className="relative w-full aspect-video">
+          <Image
+            src={thumbnailUrl}
+            alt={episode.title}
+            fill
+            className="object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          {durationMinutes && (
+            <span className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
+              {durationMinutes} min
+            </span>
+          )}
+        </div>
         <div className="p-4">
           <h3 className="font-semibold line-clamp-2 mb-2 group-hover:text-primary transition-colors">
             {episode.title}
           </h3>
-          {episode.description && (
-            <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-              {episode.description}
-            </p>
-          )}
           {episode.published_at && (
             <span className="text-xs text-muted-foreground">
               {formatDistanceToNow(new Date(episode.published_at), {

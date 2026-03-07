@@ -57,7 +57,7 @@ export function ChannelSidebar({ channel }: { channel: Channel }) {
       name: 'Catalog',
       items: [
         { name: 'Episodes', href: `${baseUrl}/episodes`, icon: Play },
-        { name: 'Guests', href: `${baseUrl}/guests`, icon: Users },
+        { name: 'People', href: `${baseUrl}/people`, icon: Users },
         { name: 'Books', href: `${baseUrl}/books`, icon: BookOpen },
       ],
     },
