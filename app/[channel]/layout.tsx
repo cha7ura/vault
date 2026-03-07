@@ -12,8 +12,9 @@ async function getChannel(slug: string) {
   return data;
 }
 
-export async function generateMetadata({ params }: { params: { channel: string } }) {
-  const channel = await getChannel(params.channel);
+export async function generateMetadata({ params }: { params: Promise<{ channel: string }> }) {
+  const { channel: channelSlug } = await params;
+  const channel = await getChannel(channelSlug);
   if (!channel) return { title: 'Channel Not Found' };
   
   return {
@@ -27,9 +28,10 @@ export default async function ChannelLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const channel = await getChannel(params.channel);
+  const { channel: channelSlug } = await params;
+  const channel = await getChannel(channelSlug);
   
   if (!channel) {
     notFound();

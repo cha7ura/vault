@@ -55,15 +55,16 @@ function formatDuration(seconds: number): string {
 export default async function EpisodePage({
   params,
 }: {
-  params: { channel: string; id: string };
+  params: Promise<{ channel: string; id: string }>;
 }) {
-  const episode = await getEpisode(params.id);
-  
+  const { channel, id } = await params;
+  const episode = await getEpisode(id);
+
   if (!episode) {
     notFound();
   }
 
-  const { insights, books, segments } = await getEpisodeDetails(params.id);
+  const { insights, books, segments } = await getEpisodeDetails(id);
 
   const frameworks = insights.filter(i => i.type === 'framework');
   const otherInsights = insights.filter(i => i.type !== 'framework');

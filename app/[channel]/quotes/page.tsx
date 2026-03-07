@@ -32,9 +32,10 @@ async function getQuotes(channelSlug: string) {
 export default async function QuotesPage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const quotes = await getQuotes(params.channel);
+  const { channel } = await params;
+  const quotes = await getQuotes(channel);
 
   return (
     <div className="min-h-screen bg-background">
@@ -52,7 +53,7 @@ export default async function QuotesPage({
               <InsightCard 
                 key={quote.id} 
                 insight={quote}
-                channelSlug={params.channel}
+                channelSlug={channel}
               />
             ))}
           </div>

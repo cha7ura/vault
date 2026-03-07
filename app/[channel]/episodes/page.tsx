@@ -26,9 +26,10 @@ async function getEpisodes(channelSlug: string) {
 export default async function EpisodesPage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const episodes = await getEpisodes(params.channel);
+  const { channel } = await params;
+  const episodes = await getEpisodes(channel);
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,7 +47,7 @@ export default async function EpisodesPage({
               <EpisodeCard 
                 key={episode.id} 
                 episode={episode}
-                channelSlug={params.channel}
+                channelSlug={channel}
               />
             ))}
           </div>

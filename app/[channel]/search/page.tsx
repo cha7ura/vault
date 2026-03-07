@@ -5,8 +5,8 @@ import { InsightCard } from '@/components/insight-card';
 import { SearchComponent } from '@/components/search-bar';
 
 interface SearchPageProps {
-  params: { channel: string };
-  searchParams: { q?: string };
+  params: Promise<{ channel: string }>;
+  searchParams: Promise<{ q?: string }>;
 }
 
 async function getChannelId(slug: string) {
@@ -20,8 +20,9 @@ async function getChannelId(slug: string) {
 }
 
 export default async function SearchPage({ params, searchParams }: SearchPageProps) {
-  const query = searchParams.q || '';
-  const channel = await getChannelId(params.channel);
+  const { channel: channelSlug } = await params;
+  const { q: query = '' } = await searchParams;
+  const channel = await getChannelId(channelSlug);
   
   if (!channel) return null;
 
@@ -45,7 +46,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="max-w-4xl mx-auto mb-8">
-          <SearchComponent channelSlug={params.channel} />
+          <SearchComponent channelSlug={channelSlug} />
         </div>
 
         {query && (
@@ -61,7 +62,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
                     <EpisodeCard 
                       key={episode.id} 
                       episode={episode}
-                      channelSlug={params.channel}
+                      channelSlug={channelSlug}
                     />
                   ))}
                 </div>
@@ -79,7 +80,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
                     <InsightCard 
                       key={insight.id} 
                       insight={insight}
-                      channelSlug={params.channel}
+                      channelSlug={channelSlug}
                     />
                   ))}
                 </div>

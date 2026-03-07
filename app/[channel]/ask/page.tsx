@@ -14,9 +14,10 @@ async function getChannel(slug: string) {
 export default async function AskPage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const channel = await getChannel(params.channel);
+  const { channel: channelSlug } = await params;
+  const channel = await getChannel(channelSlug);
   if (!channel) return null;
 
   return (

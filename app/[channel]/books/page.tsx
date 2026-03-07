@@ -31,9 +31,10 @@ async function getBooks(channelSlug: string) {
 export default async function BooksPage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const books = await getBooks(params.channel);
+  const { channel } = await params;
+  const books = await getBooks(channel);
 
   // Deduplicate books by title
   const uniqueBooks = books.reduce((acc, book) => {

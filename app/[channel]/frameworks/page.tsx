@@ -33,9 +33,10 @@ async function getFrameworks(channelSlug: string) {
 export default async function FrameworksPage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const frameworks = await getFrameworks(params.channel);
+  const { channel } = await params;
+  const frameworks = await getFrameworks(channel);
 
   return (
     <div className="min-h-screen bg-background">
@@ -53,7 +54,7 @@ export default async function FrameworksPage({
               <InsightCard 
                 key={framework.id} 
                 insight={framework}
-                channelSlug={params.channel}
+                channelSlug={channel}
               />
             ))}
           </div>

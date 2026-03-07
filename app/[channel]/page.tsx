@@ -33,9 +33,10 @@ async function getStats(channelId: string) {
 export default async function ChannelHomePage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const channel = await getChannel(params.channel);
+  const { channel: channelSlug } = await params;
+  const channel = await getChannel(channelSlug);
   if (!channel) return null;
 
   return (
@@ -52,7 +53,7 @@ export default async function ChannelHomePage({
             </p>
           </div>
           
-          <SearchComponent channelSlug={params.channel} />
+          <SearchComponent channelSlug={channelSlug} />
         </div>
       </div>
     </div>

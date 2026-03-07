@@ -24,9 +24,10 @@ async function getGuests(channelSlug: string) {
 export default async function GuestsPage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const guests = await getGuests(params.channel);
+  const { channel } = await params;
+  const guests = await getGuests(channel);
 
   return (
     <div className="min-h-screen bg-background">
@@ -44,7 +45,7 @@ export default async function GuestsPage({
               <GuestCard 
                 key={guest.id} 
                 guest={guest}
-                channelSlug={params.channel}
+                channelSlug={channel}
               />
             ))}
           </div>

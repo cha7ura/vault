@@ -32,9 +32,10 @@ async function getStats(channelId: string) {
 export default async function AboutPage({
   params,
 }: {
-  params: { channel: string };
+  params: Promise<{ channel: string }>;
 }) {
-  const channel = await getChannel(params.channel);
+  const { channel: channelSlug } = await params;
+  const channel = await getChannel(channelSlug);
   if (!channel) return null;
 
   const stats = await getStats(channel.id);
