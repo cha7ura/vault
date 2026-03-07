@@ -16,33 +16,31 @@ async function getEpisode(id: string) {
   return data;
 }
 
-async function getInsights(episodeId: string) {
+async function getEpisodeDetails(episodeId: string) {
   const supabase = createServerClient();
-  const { data } = await supabase
-    .from('insights')
-    .select('*')
-    .eq('episode_id', episodeId)
-    .order('start_time_seconds');
-  return data || [];
-}
 
-async function getBooks(episodeId: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('books')
-    .select('*')
-    .eq('episode_id', episodeId);
-  return data || [];
-}
+  const [insights, books, segments] = await Promise.all([
+    supabase
+      .from('insights')
+      .select('*')
+      .eq('episode_id', episodeId)
+      .order('start_time_seconds'),
+    supabase
+      .from('books')
+      .select('*')
+      .eq('episode_id', episodeId),
+    supabase
+      .from('segments')
+      .select('id, start_time, end_time, text, speaker, words')
+      .eq('episode_id', episodeId)
+      .order('start_time'),
+  ]);
 
-async function getSegments(episodeId: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('segments')
-    .select('id, start_time, end_time, text, speaker, words')
-    .eq('episode_id', episodeId)
-    .order('start_time');
-  return data || [];
+  return {
+    insights: insights.data || [],
+    books: books.data || [],
+    segments: segments.data || [],
+  };
 }
 
 function formatDuration(seconds: number): string {
@@ -65,11 +63,7 @@ export default async function EpisodePage({
     notFound();
   }
 
-  const [insights, books, segments] = await Promise.all([
-    getInsights(params.id),
-    getBooks(params.id),
-    getSegments(params.id),
-  ]);
+  const { insights, books, segments } = await getEpisodeDetails(params.id);
 
   const frameworks = insights.filter(i => i.type === 'framework');
   const otherInsights = insights.filter(i => i.type !== 'framework');
@@ -127,20 +121,19 @@ export default async function EpisodePage({
             </div>
 
             {/* Transcript */}
-            {segments.length > 0 ? (
+            {(segments.length > 0 || episode.transcript) && (
               <div>
                 <h2 className="text-xl font-semibold mb-4">Transcript</h2>
-                <TranscriptViewer
-                  segments={segments}
-                  youtubeId={episode.youtube_id}
-                />
+                {segments.length > 0 ? (
+                  <TranscriptViewer
+                    segments={segments}
+                    youtubeId={episode.youtube_id}
+                  />
+                ) : (
+                  <TranscriptViewer transcript={episode.transcript_formatted || episode.transcript} />
+                )}
               </div>
-            ) : episode.transcript ? (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Transcript</h2>
-                <TranscriptViewer transcript={episode.transcript_formatted || episode.transcript} />
-              </div>
-            ) : null}
+            )}
           </div>
 
           {/* Sidebar */}
