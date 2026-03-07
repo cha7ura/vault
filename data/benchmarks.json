@@ -1,0 +1,1 @@
+[{"id":2,"episode_id":1,"diarizer":"whisper-diarization","config":null,"wer":null,"der":null,"duration_s":16952.0,"output_path":null,"notes":"whisper-diarization (MahmoudAshraf97) — medium.en model, CPU, NeMo MSDD diarizer","created_at":"2026-03-03 04:04:37.952755"}]
