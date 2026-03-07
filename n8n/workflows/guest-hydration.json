@@ -1,0 +1,420 @@
+{
+  "name": "DOAC Guest Hydration",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily Hydration Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "guests",
+        "returnAll": false,
+        "limit": 10,
+        "filterType": "string",
+        "filterString": "hydrated_at=is.null"
+      },
+      "id": "get-unhydrated-guests",
+      "name": "Get Un-hydrated Guests",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [220, 0],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-guests",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-has-guests",
+      "name": "Has Guests?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "=",
+        "options": {}
+      },
+      "id": "split-guests",
+      "name": "Split Guests",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [660, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": \"{{ $json.name }} biography career background\",\n  \"sources\": [\"web\"],\n  \"limit\": 5,\n  \"scrapeOptions\": {\n    \"formats\": [\"markdown\"],\n    \"onlyMainContent\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "search-bio",
+      "name": "Search Bio (Firecrawl)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, -100]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "rate-limit-1",
+      "name": "Rate Limit",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": \"{{ $('Split Guests').item.json.name }} LinkedIn Twitter social media\",\n  \"sources\": [\"web\"],\n  \"limit\": 3,\n  \"scrapeOptions\": {\n    \"formats\": [\"markdown\"],\n    \"onlyMainContent\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "search-social",
+      "name": "Search Social Links",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -100]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "rate-limit-2",
+      "name": "Rate Limit 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.FIRECRAWL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": \"{{ $('Split Guests').item.json.name }} books author written\",\n  \"sources\": [\"web\"],\n  \"limit\": 3,\n  \"scrapeOptions\": {\n    \"formats\": [\"markdown\"],\n    \"onlyMainContent\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "search-books",
+      "name": "Search Books",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all search results\nconst guestName = $('Split Guests').item.json.name;\nconst guestId = $('Split Guests').item.json.id;\n\nconst bioResults = $('Search Bio (Firecrawl)').item.json.data?.web || [];\nconst socialResults = $('Search Social Links').item.json.data?.web || [];\nconst bookResults = $('Search Books').item.json.data?.web || [];\n\n// Combine all sources\nconst allSources = [...bioResults, ...socialResults, ...bookResults];\n\n// Build context for LLM\nconst context = allSources\n  .slice(0, 8)\n  .map((s, i) => {\n    const content = s.markdown || s.content || s.description || '';\n    const truncated = content.length > 2000 ? content.substring(0, 2000) + '...' : content;\n    return `[${i + 1}] ${s.title}\\nURL: ${s.url}\\n${truncated}`;\n  })\n  .join('\\n\\n---\\n\\n');\n\nreturn {\n  json: {\n    guestId,\n    guestName,\n    context,\n    sourceCount: allSources.length\n  }\n};"
+      },
+      "id": "combine-sources",
+      "name": "Combine Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://doac-vault.vercel.app"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-4o\",\n  \"temperature\": 0.2,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert at synthesizing biographical information from multiple sources. Always return valid JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Based on these web sources, create a comprehensive profile for {{ $json.guestName }}.\\n\\nSources:\\n{{ $json.context }}\\n\\nExtract and return a JSON object with:\\n- bio: A 2-3 sentence professional biography\\n- photo_url: URL to their professional photo if found\\n- twitter: Their Twitter/X handle (just username without @)\\n- linkedin: Full LinkedIn profile URL if found\\n- website: Their personal or company website URL\\n- books_authored: Array of books they wrote: [{title, year, amazon_url}]\\n- companies: Array of companies they founded or work at: [{name, role, url}]\\n\\nRules:\\n- Only include verified information from sources\\n- Use null for fields that cannot be determined\\n- For books_authored, only include books THEY wrote\\n\\nReturn ONLY valid JSON.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "synthesize-profile",
+      "name": "Synthesize Profile (OpenRouter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the synthesized profile\nconst guestId = $('Combine Sources').item.json.guestId;\nconst guestName = $('Combine Sources').item.json.guestName;\nconst response = $json;\n\nlet profile = {};\ntry {\n  const content = response.choices[0].message.content;\n  const jsonStr = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  profile = JSON.parse(jsonStr);\n} catch (e) {\n  profile = { bio: null };\n}\n\nreturn {\n  json: {\n    id: guestId,\n    name: guestName,\n    bio: profile.bio || null,\n    photo_url: profile.photo_url || null,\n    twitter: profile.twitter || null,\n    linkedin: profile.linkedin || null,\n    website: profile.website || null,\n    books_authored: profile.books_authored?.length > 0 ? profile.books_authored : null,\n    companies: profile.companies?.length > 0 ? profile.companies : null,\n    hydrated_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "parse-profile",
+      "name": "Parse Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, -100]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "guests",
+        "columns": "bio,photo_url,twitter,linkedin,website,books_authored,companies,hydrated_at",
+        "filterType": "string",
+        "filterString": "id=eq.{{ $json.id }}"
+      },
+      "id": "update-guest",
+      "name": "Update Guest",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2640, -100],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "no-guests",
+      "name": "No Guests to Hydrate",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [660, 100]
+    }
+  ],
+  "connections": {
+    "Daily Hydration Check": {
+      "main": [
+        [
+          {
+            "node": "Get Un-hydrated Guests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Un-hydrated Guests": {
+      "main": [
+        [
+          {
+            "node": "Has Guests?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Guests?": {
+      "main": [
+        [
+          {
+            "node": "Split Guests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Guests to Hydrate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Guests": {
+      "main": [
+        [
+          {
+            "node": "Search Bio (Firecrawl)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Bio (Firecrawl)": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit": {
+      "main": [
+        [
+          {
+            "node": "Search Social Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Social Links": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit 2": {
+      "main": [
+        [
+          {
+            "node": "Search Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Books": {
+      "main": [
+        [
+          {
+            "node": "Combine Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Sources": {
+      "main": [
+        [
+          {
+            "node": "Synthesize Profile (OpenRouter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthesize Profile (OpenRouter)": {
+      "main": [
+        [
+          {
+            "node": "Parse Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Profile": {
+      "main": [
+        [
+          {
+            "node": "Update Guest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-17T00:00:00.000Z",
+  "versionId": "1"
+}

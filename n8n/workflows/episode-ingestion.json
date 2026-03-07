@@ -1,0 +1,443 @@
+{
+  "name": "Vault Episode Ingestion (Multi-tenant)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ingest-channel",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Ingest Channel",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "ingest-channel"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract channel from webhook body\nconst body = $input.item.json.body || $input.item.json;\nconst channelInput = body.channel || body.channelUrl || body.channelId;\n\nif (!channelInput) {\n  throw new Error('Missing channel parameter. Provide channel URL or ID.');\n}\n\n// Determine if it's a URL or direct ID\nlet channelId = channelInput;\nlet needsResolve = false;\n\nif (channelInput.includes('youtube.com')) {\n  needsResolve = true;\n} else if (channelInput.startsWith('@')) {\n  needsResolve = true;\n} else if (!channelInput.startsWith('UC')) {\n  needsResolve = true;\n}\n\nreturn {\n  json: {\n    channelInput,\n    channelId: needsResolve ? null : channelInput,\n    needsResolve,\n    limit: body.limit || 10,\n    skipExisting: body.skipExisting !== false\n  }\n};"
+      },
+      "id": "parse-input",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needs-resolve",
+              "leftValue": "={{ $json.needsResolve }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-needs-resolve",
+      "name": "Needs Resolution?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.YOUTUBE_API_KEY }}"
+            },
+            {
+              "name": "forHandle",
+              "value": "={{ $('Parse Input').item.json.channelInput.replace('@', '').replace('https://www.youtube.com/', '').replace('youtube.com/', '') }}"
+            },
+            {
+              "name": "part",
+              "value": "id,snippet,statistics"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "resolve-channel",
+      "name": "Resolve Channel ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst parseInput = $('Parse Input').item.json;\n\nlet channelId, channelName, channelDescription, thumbnailUrl;\n\nif (data.items && data.items.length > 0) {\n  const item = data.items[0];\n  channelId = item.id;\n  channelName = item.snippet.title;\n  channelDescription = item.snippet.description;\n  thumbnailUrl = item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default?.url;\n} else {\n  // Fallback: assume input was already a channel ID\n  channelId = parseInput.channelInput.replace(/.*\\/channel\\//, '').replace(/[?#].*/, '');\n  channelName = 'Unknown Channel';\n}\n\nreturn {\n  json: {\n    channelId,\n    channelName,\n    channelDescription,\n    thumbnailUrl,\n    limit: parseInput.limit,\n    skipExisting: parseInput.skipExisting\n  }\n};"
+      },
+      "id": "extract-channel-info",
+      "name": "Extract Channel Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Direct channel ID provided\nconst parseInput = $input.item.json;\n\nreturn {\n  json: {\n    channelId: parseInput.channelId,\n    channelName: null, // Will be fetched later\n    limit: parseInput.limit,\n    skipExisting: parseInput.skipExisting\n  }\n};"
+      },
+      "id": "use-direct-id",
+      "name": "Use Direct ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 100]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-channel-info",
+      "name": "Merge Channel Info",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "channels",
+        "returnAll": false,
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "youtube_channel_id=eq.{{ $json.channelId }}"
+      },
+      "id": "check-channel-exists",
+      "name": "Check Channel Exists",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1320, 0],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "channel-exists",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "channel-exists",
+      "name": "Channel Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "channels",
+        "columns": "youtube_channel_id,name,slug,description,thumbnail_url"
+      },
+      "id": "create-channel",
+      "name": "Create Channel",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1760, -100],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.YOUTUBE_API_KEY }}"
+            },
+            {
+              "name": "channelId",
+              "value": "={{ $('Merge Channel Info').item.json.channelId }}"
+            },
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "order",
+              "value": "date"
+            },
+            {
+              "name": "type",
+              "value": "video"
+            },
+            {
+              "name": "maxResults",
+              "value": "={{ $('Merge Channel Info').item.json.limit }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-videos",
+      "name": "Fetch Videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 0]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "split-videos",
+      "name": "Split Videos",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [2200, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.YOUTUBE_API_KEY }}"
+            },
+            {
+              "name": "id",
+              "value": "={{ $json.id.videoId }}"
+            },
+            {
+              "name": "part",
+              "value": "contentDetails,snippet"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-video-details",
+      "name": "Get Video Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"message\": \"Ingestion started\", \"channelId\": \"{{ $('Merge Channel Info').item.json.channelId }}\", \"videosFound\": {{ $('Fetch Videos').item.json.pageInfo.totalResults }} }",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2640, 200]
+    }
+  ],
+  "connections": {
+    "Webhook: Ingest Channel": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Needs Resolution?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Resolution?": {
+      "main": [
+        [
+          {
+            "node": "Resolve Channel ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Direct ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Channel ID": {
+      "main": [
+        [
+          {
+            "node": "Extract Channel Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Channel Info": {
+      "main": [
+        [
+          {
+            "node": "Merge Channel Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Direct ID": {
+      "main": [
+        [
+          {
+            "node": "Merge Channel Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Channel Info": {
+      "main": [
+        [
+          {
+            "node": "Check Channel Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Channel Exists": {
+      "main": [
+        [
+          {
+            "node": "Channel Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Channel Exists?": {
+      "main": [
+        [
+          {
+            "node": "Create Channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Channel": {
+      "main": [
+        [
+          {
+            "node": "Fetch Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Videos": {
+      "main": [
+        [
+          {
+            "node": "Split Videos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Videos": {
+      "main": [
+        [
+          {
+            "node": "Get Video Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["multi-tenant"],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-17T00:00:00.000Z",
+  "versionId": "2"
+}
