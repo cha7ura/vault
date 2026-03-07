@@ -36,6 +36,12 @@ Thumbs.db
 # Lock files (pipeline uses uv.lock, dashboard uses package-lock.json)
 # These are committed — don't ignore them
 
+# Next.js auto-generated
+next-env.d.ts
+
+# Claude Code local settings
+.claude/settings.local.json
+
 # Misc
 *.pem
 *.tsbuildinfo
