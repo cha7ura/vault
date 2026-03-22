@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase';
-import { TranscriptViewer } from '@/components/transcript-viewer';
+import { EpisodeTranscriptTabs } from '@/components/episode-transcript-tabs';
 import { format } from 'date-fns';
 import { Clock, Calendar, ExternalLink, FileText, Lightbulb, BookOpen } from 'lucide-react';
 
@@ -59,21 +59,21 @@ export default async function EpisodePage({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         {/* Header */}
-        <div className="max-w-4xl mb-8">
-          <h1 className="text-3xl font-bold mb-4">{episode.title}</h1>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-3">{episode.title}</h1>
 
-          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground mb-3">
             {episode.published_at && (
               <div className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
+                <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 {format(new Date(episode.published_at), 'MMM d, yyyy')}
               </div>
             )}
             {episode.duration_seconds && (
               <div className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
+                <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 {formatDuration(episode.duration_seconds)}
               </div>
             )}
@@ -83,46 +83,44 @@ export default async function EpisodePage({
               rel="noopener noreferrer"
               className="flex items-center gap-1 hover:text-foreground"
             >
-              <ExternalLink className="h-4 w-4" />
-              Watch on YouTube
+              <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              YouTube
             </a>
           </div>
 
           {episode.description && (
-            <p className="text-muted-foreground text-sm whitespace-pre-line line-clamp-4">
+            <p className="text-muted-foreground text-xs sm:text-sm whitespace-pre-line line-clamp-3 sm:line-clamp-4 max-w-4xl">
               {episode.description}
             </p>
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Video Embed */}
-            <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-              <iframe
-                src={`https://www.youtube.com/embed/${episode.youtube_id}?enablejsapi=1`}
-                title={episode.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full"
-              />
-            </div>
+        {/* Video — full width, sticky on desktop so it stays visible while scrolling transcript */}
+        <div className="mb-6 sm:mb-8">
+          <div className="aspect-video bg-muted rounded-lg overflow-hidden lg:sticky lg:top-4 lg:z-10">
+            <iframe
+              src={`https://www.youtube.com/embed/${episode.youtube_id}?enablejsapi=1&origin=${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}`}
+              title={episode.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full"
+            />
+          </div>
+        </div>
 
-            {/* Transcript */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+          {/* Transcript */}
+          <div className="lg:col-span-2">
             {segments.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Transcript</h2>
-                <TranscriptViewer
-                  segments={segments}
-                  youtubeId={episode.youtube_id}
-                />
-              </div>
+              <EpisodeTranscriptTabs
+                segments={segments}
+                youtubeId={episode.youtube_id}
+              />
             )}
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-4">
+          <div className="space-y-4 order-first lg:order-last">
             <ComingSoonSection icon={FileText} title="Summary" />
             <ComingSoonSection icon={Lightbulb} title="Key Insights" />
             <ComingSoonSection icon={BookOpen} title="Books Mentioned" />
