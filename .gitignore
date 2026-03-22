@@ -13,6 +13,7 @@ out/
 # Data & cache (large audio/transcripts/benchmarks)
 pipeline/data/
 data/audio/
+data/agents/
 .firecrawl/
 
 # IDE
