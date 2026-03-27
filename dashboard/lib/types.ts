@@ -6,7 +6,7 @@ export interface WordData {
 }
 
 export interface Segment {
-  id: number;
+  id: string;
   start_time: number;
   end_time: number;
   text: string;
@@ -18,7 +18,7 @@ export interface Segment {
 }
 
 export interface BenchmarkData {
-  id: number;
+  id: string;
   diarizer: string;
   duration_s: number | null;
   wer: number | null;
@@ -27,7 +27,7 @@ export interface BenchmarkData {
 }
 
 export interface Episode {
-  id: number;
+  id: string;
   youtube_id: string;
   title: string;
   status: string;
