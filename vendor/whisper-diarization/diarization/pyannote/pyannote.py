@@ -37,13 +37,22 @@ class PyannoteDiarizer:
         Returns:
             Sorted list of (start_ms, end_ms, speaker_id) tuples.
         """
-        diarization = self.pipeline({"waveform": audio, "sample_rate": 16000})
+        output = self.pipeline({"waveform": audio, "sample_rate": 16000})
+
+        # Handle both old (Annotation) and new (DiarizeOutput) pyannote APIs
+        if hasattr(output, "itertracks"):
+            tracks = output.itertracks(yield_label=True)
+        elif hasattr(output, "speaker_diarization"):
+            annotation = output.speaker_diarization
+            tracks = annotation.itertracks(yield_label=True)
+        else:
+            raise RuntimeError(f"Unexpected pyannote output type: {type(output)}")
 
         # Map pyannote speaker labels (e.g. "SPEAKER_00") to integer IDs
         speaker_map: dict[str, int] = {}
         labels: list[tuple[int, int, int]] = []
 
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
+        for turn, _, speaker in tracks:
             if speaker not in speaker_map:
                 speaker_map[speaker] = len(speaker_map)
             start_ms = int(turn.start * 1000)
