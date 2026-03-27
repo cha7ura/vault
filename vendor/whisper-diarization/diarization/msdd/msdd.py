@@ -44,7 +44,7 @@ class MSDDDiarizer:
                 max_speakers=8,
                 num_speakers=None,
                 tmpdir=temp_path,
-                batch_size=24,
+                batch_size=64,
                 num_workers=0,
                 verbose=True,
             )
@@ -73,7 +73,7 @@ class MSDDDiarizer:
 
 def create_config():
     config = OmegaConf.load(os.path.join(os.path.dirname(__file__), "diar_infer_telephonic.yaml"))
-    pretrained_vad = "vad_multilingual_marblenet"
+    pretrained_vad = "vad_multilingual_frame_marblenet"
     pretrained_speaker_model = "titanet_large"
 
     config.diarizer.out_dir = None
@@ -87,6 +87,7 @@ def create_config():
     config.diarizer.vad.parameters.onset = 0.8
     config.diarizer.vad.parameters.offset = 0.6
     config.diarizer.vad.parameters.pad_offset = -0.05
+    config.diarizer.vad.parameters.min_duration_off = 0.3
     config.diarizer.msdd_model.model_path = (
         "diar_msdd_telephonic"  # Telephonic speaker diarization model
     )
