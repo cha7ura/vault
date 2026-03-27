@@ -18,7 +18,7 @@ async function getSegments(episodeId: string) {
   const supabase = createServerClient();
   const { data } = await supabase
     .from('segments')
-    .select('id, start_time, end_time, text, speaker, words')
+    .select('id, start_time, end_time, text, speaker, words, diarizer')
     .eq('episode_id', episodeId)
     .order('start_time');
   return data || [];
