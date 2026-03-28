@@ -4,17 +4,26 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { use } from "react";
 import YouTube, { YouTubeEvent } from "react-youtube";
 import { TranscriptPanel } from "@/components/transcript-panel";
-import { DiffPanel } from "@/components/diff-panel";
 import { formatTime } from "@/lib/utils";
 import { fetchEpisode, fetchSegments } from "@/lib/api";
 import type { Episode, Segment } from "@/lib/types";
 
-const DIARIZERS = ["nemo-msdd", "pyannote-3.1"] as const;
+const ALL_DIARIZERS = [
+  "nemo-msdd",
+  "nemo-msdd-demucs",
+  "pyannote-3.1",
+  "pyannote-3.1-demucs",
+] as const;
+
+const LABELS: Record<string, string> = {
+  "nemo-msdd": "NeMo MSDD",
+  "nemo-msdd-demucs": "NeMo MSDD + Demucs",
+  "pyannote-3.1": "Pyannote 3.1",
+  "pyannote-3.1-demucs": "Pyannote 3.1 + Demucs",
+};
 
 function labelFor(d: string) {
-  if (d.includes("msdd") || d.includes("nemo")) return "NeMo MSDD";
-  if (d.includes("pyannote")) return "Pyannote 3.1";
-  return d;
+  return LABELS[d] ?? d;
 }
 
 export default function ComparePage({
@@ -34,7 +43,7 @@ export default function ComparePage({
   const playerRef = useRef<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch episode + segments for both diarizers
+  // Fetch episode + segments for all diarizers (only keep those with data)
   useEffect(() => {
     async function load() {
       try {
@@ -42,7 +51,7 @@ export default function ComparePage({
         setEpisode(ep);
 
         const results = await Promise.all(
-          DIARIZERS.map(async (d) => ({
+          ALL_DIARIZERS.map(async (d) => ({
             diarizer: d,
             segments: await fetchSegments(episodeId, d),
           }))
@@ -116,7 +125,9 @@ export default function ComparePage({
     );
   }
 
-  const diarizers = Object.keys(segmentsByDiarizer);
+  // Preserve display order: raw first, demucs second, grouped by engine
+  const diarizers = ALL_DIARIZERS.filter((d) => d in segmentsByDiarizer);
+  const colCount = diarizers.length || 1;
 
   return (
     <div className="flex flex-col h-screen">
@@ -150,13 +161,10 @@ export default function ComparePage({
         </div>
       </div>
 
-      {/* Side-by-side transcript panels + diff */}
+      {/* Transcript panels — one per diarizer */}
       <div
         className="flex-1 border-t mt-4 min-h-0 grid gap-0"
-        style={{
-          gridTemplateColumns:
-            diarizers.length >= 2 ? "1fr 1fr 1fr" : `repeat(${diarizers.length}, 1fr)`,
-        }}
+        style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}
       >
         {diarizers.map((d, i) => (
           <div
@@ -174,18 +182,6 @@ export default function ComparePage({
             />
           </div>
         ))}
-        {diarizers.length >= 2 && (
-          <div className="min-h-0 overflow-hidden border-l border-border">
-            <DiffPanel
-              leftLabel={labelFor(diarizers[0])}
-              rightLabel={labelFor(diarizers[1])}
-              leftSegments={segmentsByDiarizer[diarizers[0]]}
-              rightSegments={segmentsByDiarizer[diarizers[1]]}
-              currentTime={currentTime}
-              onSeek={seekTo}
-            />
-          </div>
-        )}
       </div>
     </div>
   );
