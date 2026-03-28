@@ -241,7 +241,7 @@ def run_postprocessing(word_timestamps, speaker_ts, language, audio_path):
 
     if language in punct_model_langs:
         _step("POST: Restoring punctuation...")
-        punct_model = PunctuationModel(model="kredor/punctuate-all")
+        punct_model = PunctuationModel(model="oliverguhr/fullstop-punctuation-multilang-large")
 
         words_list = list(map(lambda x: x["word"], wsm))
 
