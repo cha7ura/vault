@@ -55,7 +55,7 @@ mtypes = {"cpu": "int8", "cuda": "float16"}
 # ---------------------------------------------------------------------------
 
 def run_whisper_transcription(audio_path, model_name, device, batch_size, language,
-                              suppress_numerals=False):
+                              suppress_numerals=False, no_speech_threshold=0.3):
     """Steps 1-2: Decode audio and transcribe with word timestamps.
 
     Returns dict with keys:
@@ -87,6 +87,7 @@ def run_whisper_transcription(audio_path, model_name, device, batch_size, langua
             suppress_tokens=suppress_tokens,
             batch_size=batch_size,
             word_timestamps=True,
+            no_speech_threshold=no_speech_threshold,
         )
     else:
         transcript_segments, info = whisper_model.transcribe(
@@ -95,6 +96,7 @@ def run_whisper_transcription(audio_path, model_name, device, batch_size, langua
             suppress_tokens=suppress_tokens,
             vad_filter=True,
             word_timestamps=True,
+            no_speech_threshold=no_speech_threshold,
         )
 
     audio_duration = len(audio_waveform) / 16000
