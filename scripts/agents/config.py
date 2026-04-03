@@ -16,8 +16,9 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 
 # Neo4j config
 NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
+NEO4J_USER = os.environ.get("NEO4J_USERNAME", os.environ.get("NEO4J_USER", "neo4j"))
 NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "password")
+NEO4J_DATABASE = os.environ.get("NEO4J_DATABASE", "neo4j")
 
 # SearXNG config
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://localhost:8888")
