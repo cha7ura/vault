@@ -263,11 +263,18 @@ def run_all(force: bool):
 
     print(f"{len(to_process)} episodes to process\n")
 
+    import time
+    import random
+
     for i, ep in enumerate(to_process, 1):
         title = (ep.get("title") or ep["youtube_id"])[:60]
         print(f"[{i}/{len(to_process)}] {ep['youtube_id']} — {title}")
         process_episode(ep["id"], ep["youtube_id"], force=force)
         print()
+        # Rate limit: 3-6s random delay to avoid YouTube 429s
+        if i < len(to_process):
+            delay = 3 + random.random() * 3
+            time.sleep(delay)
 
 
 def main():
