@@ -1,0 +1,8 @@
+# Pipeline dependencies
+graphiti-core @ file:vendor/graphiti
+neo4j>=5.0
+numpy>=1.24
+requests>=2.28
+python-dotenv>=1.0
+supabase>=2.0
+duckduckgo-search>=6.0
