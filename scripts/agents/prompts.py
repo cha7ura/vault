@@ -94,3 +94,31 @@ Produce a JSON object with exactly these fields:
 - "emotional_peaks": array of up to 2 objects, each with "topic" (string) and "reaction" (string)
 
 Return ONLY the JSON object, no explanation or commentary."""
+
+PROFILE_EXTRACTION_PROMPT = """Extract a structured profile from these search results about {name}.
+
+Search results:
+{results_text}
+
+Return a JSON object with these fields (use null if not found):
+- "bio": one-sentence biography
+- "credentials": degrees, titles, positions
+- "photo_url": URL to a profile photo if found
+- "socials": {{"twitter": url, "instagram": url, "youtube": url, "website": url}}
+- "books_authored": list of book titles
+- "companies": list of {{"name": str, "role": str}}
+- "wikipedia_summary": first paragraph from Wikipedia if available
+- "expertise_domains": list of topic areas
+
+Return ONLY valid JSON."""
+
+PERSONA_EXTRACTION_PROMPT = """Analyze these transcript turns by {name} and describe their communication style and personality.
+
+Turns:
+{turns_text}
+
+Return a JSON object with:
+- "communication_style": {{"tone": str, "formality": str, "storytelling_tendency": str, "signature_phrases": list, "speech_patterns": list}}
+- "personality_traits": {{"openness": str, "conscientiousness": str, "extraversion": str, "agreeableness": str, "emotional_stability": str}}
+
+Use brief descriptors (1-3 words each). Return ONLY valid JSON."""
