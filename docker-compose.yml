@@ -43,6 +43,18 @@ services:
       - meilisearch
     restart: unless-stopped
 
+  searxng:
+    image: searxng/searxng:latest
+    container_name: vault-searxng
+    ports:
+      - "8888:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8888
+    volumes:
+      - searxng_data:/etc/searxng
+    restart: unless-stopped
+
 volumes:
   meili_data:
   n8n_data:
+  searxng_data:
