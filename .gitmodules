@@ -1,0 +1,3 @@
+[submodule "vendor/graphiti"]
+	path = vendor/graphiti
+	url = https://github.com/cha7ura/graphiti.git
