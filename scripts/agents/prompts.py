@@ -32,6 +32,18 @@ EMPTY_MEMORY = {
     "growth_log": [],
 }
 
+INTRO_DETECTION_PROMPT = """You are analyzing the start of a podcast episode transcript. Determine where the actual interview/conversation begins (after any intro music, sponsor reads, subscribe prompts).
+
+Transcript (first segments):
+{segments_text}
+
+Return ONLY the position number (integer) of the first segment where the real conversation starts. If the conversation starts from the very beginning, return 0."""
+
+GUEST_EXTRACTION_PROMPT = """Extract the guest's full name from this podcast episode description. Return ONLY the name, nothing else. If you cannot determine the guest name, return "UNKNOWN".
+
+Description:
+{description}"""
+
 TRIAGE_PROMPT = """You are a transcript analyst. Given a single transcript turn, classify it as either SUBSTANTIVE or FILLER.
 
 FILLER: greetings, acknowledgements, back-channel responses, filler words, very short affirmations with no informational content.
