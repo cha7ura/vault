@@ -81,11 +81,11 @@ Sources: `episode_guests` table, YouTube description text, transcript speaker co
 
 ### 1c. Map Speakers
 
-Map SPEAKER_00/01/etc to real names using voice fingerprinting.
+Map Speaker 0/1 to real names.
 
-Uses existing pipeline: `extract_embeddings.py` (TitaNet 192-dim embeddings) + `map_speakers.py` (cosine similarity against host anchor). Host anchor refreshes every 10 mapped episodes.
+**For DOAC (2-speaker episodes):** All 246 diarized episodes have exactly 2 speakers. Use heuristic host detection — the speaker who says "welcome to", "diary of a CEO", or appears most in intro segments is Steven Bartlett. The other is the guest identified in 1b. No voice embeddings needed.
 
-For 2-speaker episodes with 1 known guest: other speaker = guest. Multi-speaker: cosine similarity ranking.
+**For multi-speaker/multi-channel (future):** Use voice fingerprinting via `extract_embeddings.py` (TitaNet 192-dim) + `map_speakers.py` (cosine similarity against host anchor). Note: the `speaker_embeddings` table does not yet exist — will need migration. TitaNet embeddings from NeMo Colab runs are not currently saved to Supabase.
 
 **Output:**
 ```python
@@ -109,14 +109,20 @@ Per-episode. Produces named, accurate transcript segments.
 
 Both sources already time-aligned in Supabase (`segments` and `yt_segments` tables, sliced to same time windows by `fetch_yt_captions.py`).
 
+Note: `yt_segments` table exists but is empty — `fetch_yt_captions.py` must run first as a prerequisite.
+
 Per segment:
 1. Word-level diff between Whisper text and YT caption text
-2. Resolution rules (no LLM):
+2. **Time gap detection** — surface segments where one source has text but the other is empty:
+   - Whisper has text, YT empty → possible YT ASR miss (keep Whisper text)
+   - YT has text, Whisper empty → possible Whisper `no_speech` skip (flag for review — may be real speech that Whisper missed)
+   - Both empty → genuine silence or music (skip)
+3. Resolution rules for overlapping text (no LLM):
    - Proper nouns (detected via capitalization diff or NER mismatch): prefer YT captions (YouTube has entity recognition in ASR)
    - Filler words / timing: prefer Whisper (better word-level timestamps)
    - Similar words (e.g., "neuroplasticity" vs "neuro plasticity"): keep Whisper
    - Completely different words at same timestamp: keep Whisper (had actual audio)
-3. Output: `clean_text` + `text_confidence` score per segment
+4. Output: `clean_text` + `text_confidence` score per segment. Gaps flagged in review UI alongside text disagreements.
 
 ### 2b. Speaker Assignment
 
