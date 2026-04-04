@@ -17,7 +17,7 @@ def llm_call(prompt: str, temperature: float = 0.3) -> str:
             "stream": False,
             "options": {"temperature": temperature},
         },
-        timeout=120,
+        timeout=300,
     )
     resp.raise_for_status()
     return resp.json()["response"].strip()

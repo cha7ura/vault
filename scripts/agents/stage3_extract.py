@@ -14,6 +14,9 @@ from scripts.agents.config import (
     NEO4J_URI,
     NEO4J_USER,
     NEO4J_PASSWORD,
+    NEO4J_DATABASE,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
 )
 from scripts.agents.llm import llm_call
 from scripts.agents.prompts import TRIAGE_PROMPT
@@ -116,8 +119,22 @@ async def ingest_episode(
 ):
     """Chunk segments and ingest into Graphiti."""
     from graphiti_core import Graphiti
+    from graphiti_core.llm_client import OpenAIClient, LLMConfig
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
-    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    llm_config = LLMConfig(
+        api_key="ollama",
+        base_url=f"{OLLAMA_BASE_URL}/v1",
+        model=OLLAMA_MODEL,
+        small_model=OLLAMA_MODEL,
+    )
+    llm_client = OpenAIClient(llm_config)
+    graph_driver = Neo4jDriver(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, database=NEO4J_DATABASE)
+
+    graphiti = Graphiti(
+        llm_client=llm_client,
+        graph_driver=graph_driver,
+    )
 
     try:
         # Add speaker names to segments
