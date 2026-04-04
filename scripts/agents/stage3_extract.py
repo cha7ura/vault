@@ -53,28 +53,16 @@ def is_heuristic_filler(text: str) -> bool:
 
 
 def triage_segments(segments: list[dict]) -> list[dict]:
-    """Filter out filler turns. Returns only substantive segments."""
-    substantive = []
+    """Filter out filler turns. Heuristic only — no LLM calls.
 
-    for seg in segments:
-        text = seg.get("clean_text") or seg["text"]
-        word_count = len(text.split())
-
-        # Obvious filler — skip
-        if is_heuristic_filler(text):
-            continue
-
-        # Long turns — always substantive
-        if word_count > 15:
-            substantive.append(seg)
-            continue
-
-        # Medium turns (6-15 words) — ask LLM
-        response = llm_call(TRIAGE_PROMPT.format(text=text))
-        if "SUBSTANTIVE" in response.upper():
-            substantive.append(seg)
-
-    return substantive
+    Removes obvious filler (<=5 words, all filler phrases).
+    Everything else passes through — Graphiti extraction naturally
+    ignores low-content turns during entity/edge extraction.
+    """
+    return [
+        seg for seg in segments
+        if not is_heuristic_filler(seg.get("clean_text") or seg["text"])
+    ]
 
 
 # ---------------------------------------------------------------------------
