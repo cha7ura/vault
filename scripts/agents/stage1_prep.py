@@ -64,15 +64,16 @@ def find_intro_end_from_chapters(chapters: list[dict]) -> float | None:
 
 
 def find_segment_at_time(segments: list[dict], target_time: float) -> int:
-    """Find the segment position closest to target_time."""
-    best_pos = 0
+    """Find the segment index closest to target_time."""
+    best_idx = 0
     best_diff = float("inf")
-    for seg in segments:
-        diff = abs(seg["start_time"] - target_time)
+    for idx, seg in enumerate(segments):
+        start = seg.get("start_time") or 0
+        diff = abs(start - target_time)
         if diff < best_diff:
             best_diff = diff
-            best_pos = seg["position"]
-    return best_pos
+            best_idx = idx
+    return best_idx
 
 
 def detect_intro_end(
@@ -91,14 +92,14 @@ def detect_intro_end(
             return find_segment_at_time(segments, intro_time)
 
     # 2. Fallback: anchor phrase scan
-    last_anchor_pos = 0
-    for seg in segments[:max_scan]:
+    last_anchor_idx = 0
+    for idx, seg in enumerate(segments[:max_scan]):
         text_lower = seg["text"].lower()
         for phrase in HOST_ANCHOR_PHRASES:
             if phrase in text_lower:
-                last_anchor_pos = seg["position"]
+                last_anchor_idx = idx
                 break
-    return last_anchor_pos
+    return last_anchor_idx
 
 
 # ---------------------------------------------------------------------------
