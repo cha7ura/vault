@@ -7,22 +7,32 @@ import requests
 from scripts.agents.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 
 
-def llm_call(prompt: str, temperature: float = 0.3, think: bool = False) -> str:
-    """Send a prompt to LLM and return the response text."""
+def llm_call(prompt: str, temperature: float = 0.3, think: bool = False, max_retries: int = 3) -> str:
+    """Send a prompt to LLM and return the response text. Retries on 429."""
+    import time
     prefix = "" if think else "/no_think\n"
-    resp = requests.post(
-        f"{LLM_BASE_URL}/chat/completions",
-        headers={"Authorization": f"Bearer {LLM_API_KEY}"},
-        json={
-            "model": LLM_MODEL,
-            "messages": [{"role": "user", "content": f"{prefix}{prompt}"}],
-            "stream": False,
-            "temperature": temperature,
-        },
-        timeout=300,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
+
+    for attempt in range(max_retries):
+        resp = requests.post(
+            f"{LLM_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {LLM_API_KEY}"},
+            json={
+                "model": LLM_MODEL,
+                "messages": [{"role": "user", "content": f"{prefix}{prompt}"}],
+                "stream": False,
+                "temperature": temperature,
+            },
+            timeout=300,
+        )
+        if resp.status_code == 429:
+            wait = (attempt + 1) * 10  # 10s, 20s, 30s
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+
+    resp.raise_for_status()  # raise on final failure
+    return ""
 
 
 def llm_json_call(prompt: str, temperature: float = 0.1) -> dict | None:
