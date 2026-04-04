@@ -4,7 +4,7 @@ from scripts.agents.llm import llm_call, llm_json_call
 
 def test_llm_call_returns_response_text():
     mock_resp = MagicMock()
-    mock_resp.json.return_value = {"response": "  SUBSTANTIVE  "}
+    mock_resp.json.return_value = {"message": {"content": "  SUBSTANTIVE  "}}
     mock_resp.raise_for_status = MagicMock()
 
     with patch("scripts.agents.llm.requests.post", return_value=mock_resp) as mock_post:
@@ -12,12 +12,12 @@ def test_llm_call_returns_response_text():
 
     assert result == "SUBSTANTIVE"
     call_args = mock_post.call_args
-    assert "api/generate" in call_args[0][0]
+    assert "api/chat" in call_args[0][0]
 
 
 def test_llm_json_call_strips_markdown_fencing():
     mock_resp = MagicMock()
-    mock_resp.json.return_value = {"response": '```json\n{"key": "value"}\n```'}
+    mock_resp.json.return_value = {"message": {"content": '```json\n{"key": "value"}\n```'}}
     mock_resp.raise_for_status = MagicMock()
 
     with patch("scripts.agents.llm.requests.post", return_value=mock_resp):
@@ -28,10 +28,34 @@ def test_llm_json_call_strips_markdown_fencing():
 
 def test_llm_json_call_returns_none_on_bad_json():
     mock_resp = MagicMock()
-    mock_resp.json.return_value = {"response": "not json at all"}
+    mock_resp.json.return_value = {"message": {"content": "not json at all"}}
     mock_resp.raise_for_status = MagicMock()
 
     with patch("scripts.agents.llm.requests.post", return_value=mock_resp):
         result = llm_json_call("Extract JSON")
 
     assert result is None
+
+
+def test_llm_call_adds_no_think_prefix():
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"message": {"content": "hello"}}
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("scripts.agents.llm.requests.post", return_value=mock_resp) as mock_post:
+        llm_call("test", think=False)
+
+    body = mock_post.call_args[1]["json"]
+    assert body["messages"][0]["content"].startswith("/no_think")
+
+
+def test_llm_call_skips_no_think_when_think_true():
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"message": {"content": "hello"}}
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("scripts.agents.llm.requests.post", return_value=mock_resp) as mock_post:
+        llm_call("test", think=True)
+
+    body = mock_post.call_args[1]["json"]
+    assert not body["messages"][0]["content"].startswith("/no_think")

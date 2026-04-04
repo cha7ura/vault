@@ -7,20 +7,21 @@ import requests
 from scripts.agents.config import OLLAMA_BASE_URL, OLLAMA_MODEL
 
 
-def llm_call(prompt: str, temperature: float = 0.3) -> str:
+def llm_call(prompt: str, temperature: float = 0.3, think: bool = False) -> str:
     """Send a prompt to Ollama and return the response text."""
+    prefix = "" if think else "/no_think\n"
     resp = requests.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
+        f"{OLLAMA_BASE_URL}/api/chat",
         json={
             "model": OLLAMA_MODEL,
-            "prompt": prompt,
+            "messages": [{"role": "user", "content": f"{prefix}{prompt}"}],
             "stream": False,
             "options": {"temperature": temperature},
         },
         timeout=300,
     )
     resp.raise_for_status()
-    return resp.json()["response"].strip()
+    return resp.json()["message"]["content"].strip()
 
 
 def llm_json_call(prompt: str, temperature: float = 0.1) -> dict | None:
