@@ -24,15 +24,73 @@ class PrepResult(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# 1a. Intro Detection
+# 1a. Intro Detection + Chapter Parsing
 # ---------------------------------------------------------------------------
 
-def detect_intro_end(segments: list[dict], max_scan: int = 60) -> int:
+CHAPTER_TIMESTAMP_RE = re.compile(r"(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)")
+INTRO_TITLES = {"intro", "introduction", "start", "opening"}
+
+
+def parse_chapters_from_description(description: str | None) -> list[dict]:
+    """Extract chapters from YouTube description timestamps.
+    Returns list of {"start_time": float, "title": str}.
+    """
+    if not description:
+        return []
+    chapters = []
+    for match in CHAPTER_TIMESTAMP_RE.finditer(description):
+        ts_str, title = match.group(1), match.group(2).strip()
+        parts = ts_str.split(":")
+        if len(parts) == 3:
+            seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        else:
+            seconds = int(parts[0]) * 60 + int(parts[1])
+        chapters.append({"start_time": seconds, "title": title})
+    return chapters
+
+
+def find_intro_end_from_chapters(chapters: list[dict]) -> float | None:
+    """Find where intro ends using chapter titles.
+    Returns start_time of the first non-intro chapter, or None if no chapters.
+    """
+    if not chapters:
+        return None
+    # If first chapter is "Intro", the second chapter is where content starts
+    if chapters[0]["title"].lower().strip().rstrip(".!") in INTRO_TITLES:
+        if len(chapters) > 1:
+            return chapters[1]["start_time"]
+    # If no "Intro" chapter, content starts from the beginning
+    return 0
+
+
+def find_segment_at_time(segments: list[dict], target_time: float) -> int:
+    """Find the segment position closest to target_time."""
+    best_pos = 0
+    best_diff = float("inf")
+    for seg in segments:
+        diff = abs(seg["start_time"] - target_time)
+        if diff < best_diff:
+            best_diff = diff
+            best_pos = seg["position"]
+    return best_pos
+
+
+def detect_intro_end(
+    segments: list[dict],
+    chapters: list[dict] | None = None,
+    max_scan: int = 60,
+) -> int:
     """Find the segment position where the real conversation starts.
 
-    Scans the first *max_scan* segments for anchor phrases.
-    Returns the position of the last anchor phrase found, or 0 if none.
+    Priority: chapters > anchor phrases > 0.
     """
+    # 1. Try chapters (most reliable)
+    if chapters:
+        intro_time = find_intro_end_from_chapters(chapters)
+        if intro_time is not None and intro_time > 0:
+            return find_segment_at_time(segments, intro_time)
+
+    # 2. Fallback: anchor phrase scan
     last_anchor_pos = 0
     for seg in segments[:max_scan]:
         text_lower = seg["text"].lower()
@@ -147,8 +205,16 @@ def prep_episode(episode_id: str) -> PrepResult:
             speakers={},
         )
 
-    # 1a. Detect intro
-    intro_end = detect_intro_end(segments)
+    # 1a. Parse chapters + detect intro
+    chapters = parse_chapters_from_description(episode.get("description"))
+
+    # Save chapters to episode
+    if chapters:
+        sb.table("episodes").update(
+            {"chapters": chapters}
+        ).eq("id", episode_id).execute()
+
+    intro_end = detect_intro_end(segments, chapters=chapters)
 
     # 1b. Identify guest
     guest_name = None
@@ -166,6 +232,23 @@ def prep_episode(episode_id: str) -> PrepResult:
     # Fallback to description parsing
     if not guest_name:
         guest_name = parse_guest_from_description(episode.get("description"))
+
+    # Fallback to LLM extraction from description
+    if not guest_name and episode.get("description"):
+        from scripts.agents.llm import llm_call
+        from scripts.agents.prompts import GUEST_EXTRACTION_PROMPT
+        response = llm_call(GUEST_EXTRACTION_PROMPT.format(description=episode["description"][:500]))
+        if response and response != "UNKNOWN" and 2 <= len(response.split()) <= 5:
+            guest_name = response.strip().strip('"')
+
+    # Fallback to title parsing (DOAC titles often have "Name: Topic")
+    if not guest_name and episode.get("title"):
+        title = episode["title"]
+        # Pattern: "Name: rest of title" or "Name | rest"
+        import re
+        match = re.match(r"^([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*[:|]", title)
+        if match:
+            guest_name = match.group(1)
 
     # 1c. Map speakers
     host_label = identify_host_speaker(segments)
