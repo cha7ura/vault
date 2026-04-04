@@ -109,6 +109,7 @@ async def ingest_episode(
     """Chunk segments and ingest into Graphiti."""
     from graphiti_core import Graphiti
     from graphiti_core.llm_client import OpenAIClient, LLMConfig
+    from graphiti_core.embedder import OpenAIEmbedder, OpenAIEmbedderConfig
     from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
     llm_config = LLMConfig(
@@ -118,10 +119,18 @@ async def ingest_episode(
         small_model=LLM_MODEL,
     )
     llm_client = OpenAIClient(llm_config)
+
+    embedder_config = OpenAIEmbedderConfig(
+        api_key=LLM_API_KEY,
+        base_url=LLM_BASE_URL,
+    )
+    embedder = OpenAIEmbedder(embedder_config)
+
     graph_driver = Neo4jDriver(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, database=NEO4J_DATABASE)
 
     graphiti = Graphiti(
         llm_client=llm_client,
+        embedder=embedder,
         graph_driver=graph_driver,
     )
 
