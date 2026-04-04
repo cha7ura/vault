@@ -15,8 +15,9 @@ from scripts.agents.config import (
     NEO4J_USER,
     NEO4J_PASSWORD,
     NEO4J_DATABASE,
-    OLLAMA_BASE_URL,
-    OLLAMA_MODEL,
+    LLM_BASE_URL,
+    LLM_API_KEY,
+    LLM_MODEL,
 )
 from scripts.agents.llm import llm_call
 from scripts.agents.prompts import TRIAGE_PROMPT
@@ -123,10 +124,10 @@ async def ingest_episode(
     from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
     llm_config = LLMConfig(
-        api_key="ollama",
-        base_url=f"{OLLAMA_BASE_URL}/v1",
-        model=OLLAMA_MODEL,
-        small_model=OLLAMA_MODEL,
+        api_key=LLM_API_KEY,
+        base_url=LLM_BASE_URL,
+        model=LLM_MODEL,
+        small_model=LLM_MODEL,
     )
     llm_client = OpenAIClient(llm_config)
     graph_driver = Neo4jDriver(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, database=NEO4J_DATABASE)

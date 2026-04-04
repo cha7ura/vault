@@ -10,9 +10,17 @@ load_dotenv(ROOT_DIR / ".env.local")
 SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
-# LLM config
+# LLM config — OpenRouter (preferred) or Ollama (fallback)
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.6-plus:free")
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
+
+# Use OpenRouter if key is set, otherwise Ollama
+USE_OPENROUTER = bool(OPENROUTER_API_KEY)
+LLM_BASE_URL = "https://openrouter.ai/api/v1" if USE_OPENROUTER else f"{OLLAMA_BASE_URL}/v1"
+LLM_API_KEY = OPENROUTER_API_KEY if USE_OPENROUTER else "ollama"
+LLM_MODEL = OPENROUTER_MODEL if USE_OPENROUTER else OLLAMA_MODEL
 
 # Neo4j config
 NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
