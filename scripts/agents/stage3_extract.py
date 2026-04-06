@@ -41,6 +41,62 @@ from podcast_vault.show_notes import extract_show_note_links
 
 
 # ---------------------------------------------------------------------------
+# Seed: pre-create host + podcast entities
+# ---------------------------------------------------------------------------
+
+async def seed_host_and_podcast(
+    host_name: str,
+    host_bio: str,
+    podcast_name: str,
+    podcast_description: str,
+    first_episode_date: str | None,
+):
+    """Pre-create host and podcast entities so episodes link to them correctly."""
+    import time as _time
+    from graphiti_core import Graphiti
+    from graphiti_core.llm_client import OpenAIClient, LLMConfig
+    from graphiti_core.embedder import OpenAIEmbedder, OpenAIEmbedderConfig
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
+    llm_config = LLMConfig(
+        api_key=LLM_API_KEY, base_url=LLM_BASE_URL,
+        model=LLM_MODEL, small_model=LLM_MODEL,
+    )
+    llm_client = OpenAIClient(llm_config)
+    embedder = OpenAIEmbedder(OpenAIEmbedderConfig(
+        api_key=LLM_API_KEY, base_url=LLM_BASE_URL,
+    ))
+    graph_driver = Neo4jDriver(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, database=NEO4J_DATABASE)
+
+    graphiti = Graphiti(llm_client=llm_client, embedder=embedder, graph_driver=graph_driver)
+
+    ref_time = datetime.fromisoformat(first_episode_date) if first_episode_date else datetime.now(timezone.utc)
+
+    seed_body = f"""{host_name} is a person who hosts {podcast_name}. {host_bio}
+
+{podcast_name}: {podcast_description}
+
+{host_name} hosts {podcast_name}."""
+
+    try:
+        t0 = _time.time()
+        await graphiti.add_episode(
+            name=f"seed-{podcast_name.lower().replace(' ', '-')}",
+            episode_body=seed_body,
+            source_description=f"Seed profile for {podcast_name} hosted by {host_name}",
+            group_id=build_group_id(podcast_name),
+            entity_types=ENTITY_TYPES,
+            edge_types=EDGE_TYPES,
+            edge_type_map=EDGE_TYPE_MAP,
+            custom_extraction_instructions=GRAPHITI_EXTRACTION_INSTRUCTIONS,
+            reference_time=ref_time,
+        )
+        print(f"    Seeded host + podcast in {_time.time() - t0:.1f}s")
+    finally:
+        await graphiti.close()
+
+
+# ---------------------------------------------------------------------------
 # 3a. Triage
 # ---------------------------------------------------------------------------
 

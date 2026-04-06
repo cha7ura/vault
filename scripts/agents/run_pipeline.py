@@ -8,7 +8,7 @@ import time
 from scripts.agents.config import get_supabase, DOAC_CHANNEL_SLUG
 from scripts.agents.stage1_prep import prep_episode
 from scripts.agents.stage2_clean import clean_episode
-from scripts.agents.stage3_extract import extract_episode
+from scripts.agents.stage3_extract import extract_episode, seed_host_and_podcast
 from scripts.agents.stage3_enrich import run_enrichment
 
 
@@ -79,11 +79,31 @@ def run_stage2(episodes: list[dict], prep_results: dict):
               f"{stats['quality_issues']} issues ({elapsed:.1f}s)")
 
 
-def run_stage3(episodes: list[dict], prep_results: dict):
+def run_stage3(episodes: list[dict], prep_results: dict, channel_slug: str = DOAC_CHANNEL_SLUG):
     """Run Stage 3 EXTRACT for all episodes."""
     print(f"\n{'='*60}")
     print(f"STAGE 3 — EXTRACT ({len(episodes)} episodes)")
     print(f"{'='*60}\n")
+
+    # Seed host + podcast entities once before first episode
+    if channel_slug == DOAC_CHANNEL_SLUG:
+        earliest_date = None
+        for ep in episodes:
+            pa = ep.get("published_at")
+            if pa and (not earliest_date or pa < earliest_date):
+                earliest_date = pa
+        print("Seeding host + podcast profile...")
+        asyncio.run(seed_host_and_podcast(
+            host_name="Steven Bartlett",
+            host_bio="Entrepreneur, investor, author of Happy Sexy Millionaire, "
+                     "CEO of Flight Story, former CEO of Social Chain. "
+                     "Investor in Huel, sits on the board of Huel.",
+            podcast_name="Diary of a CEO",
+            podcast_description="The Diary of a CEO is a podcast hosted by Steven Bartlett "
+                                "featuring interviews with world-class guests on business, "
+                                "health, relationships, and personal development.",
+            first_episode_date=earliest_date,
+        ))
 
     for idx, ep in enumerate(episodes, 1):
         if ep.get("knowledge_processed_at"):
@@ -143,7 +163,7 @@ def main():
         run_stage2(episodes, prep_results)
 
     if args.stage in ("extract", "all"):
-        run_stage3(episodes, prep_results)
+        run_stage3(episodes, prep_results, channel_slug=args.channel)
 
     if args.stage in ("enrich", "all"):
         run_enrichment()
