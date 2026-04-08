@@ -5,18 +5,16 @@ import argparse
 import asyncio
 import time
 
-from scripts.agents.config import get_supabase, DOAC_CHANNEL_SLUG
+from scripts.agents.config import get_supabase, DOAC_CHANNEL_SLUG, WIKI_DIR
 from scripts.agents.stage1_prep import prep_episode
 from scripts.agents.stage2_clean import clean_episode
-from scripts.agents.stage3_extract import extract_episode, seed_host_and_podcast
+from scripts.agents.stage3_extract import extract_episode
 from scripts.agents.stage3_enrich import run_enrichment
 
 
 def get_episodes(channel_slug: str) -> list[dict]:
-    """Fetch episodes that have segments (diarized)."""
+    """Fetch episodes ordered oldest → newest (chronological wiki accumulation)."""
     sb = get_supabase()
-
-    # Get channel
     channel = (
         sb.table("channels")
         .select("id")
@@ -24,18 +22,27 @@ def get_episodes(channel_slug: str) -> list[dict]:
         .single()
         .execute()
     ).data
-
-    # Get episodes ordered by duration (short first)
     episodes = (
         sb.table("episodes")
         .select("id, youtube_id, title, published_at, duration_seconds, "
-                "intro_end_position, knowledge_processed_at")
+                "intro_end_position, knowledge_processed_at, wiki_processed_at, speaker_map")
         .eq("channel_id", channel["id"])
-        .order("duration_seconds")
+        .order("published_at")   # oldest first for wiki accumulation
         .execute()
     ).data
-
     return episodes
+
+
+def seed_wiki() -> None:
+    """Ensure seed pages exist before processing any episodes.
+    No-op if wiki/_index.md already has the seed entries.
+    """
+    from scripts.agents.wiki_writer import read_index
+    index = read_index(WIKI_DIR)
+    if "steven bartlett" in index and "diary of a ceo" in index:
+        print("  Wiki already seeded — skipping")
+        return
+    print("  Wiki seed pages missing — please run Task 2 (create wiki/ directory) first")
 
 
 def run_stage1(episodes: list[dict]) -> dict:
@@ -80,34 +87,17 @@ def run_stage2(episodes: list[dict], prep_results: dict):
 
 
 def run_stage3(episodes: list[dict], prep_results: dict, channel_slug: str = DOAC_CHANNEL_SLUG):
-    """Run Stage 3 EXTRACT for all episodes."""
+    """Run Stage 3 WIKI EXTRACT for all episodes, oldest → newest."""
     print(f"\n{'='*60}")
-    print(f"STAGE 3 — EXTRACT ({len(episodes)} episodes)")
+    print(f"STAGE 3 — WIKI EXTRACT ({len(episodes)} episodes)")
     print(f"{'='*60}\n")
 
-    # Seed host + podcast entities once before first episode
-    if channel_slug == DOAC_CHANNEL_SLUG:
-        earliest_date = None
-        for ep in episodes:
-            pa = ep.get("published_at")
-            if pa and (not earliest_date or pa < earliest_date):
-                earliest_date = pa
-        print("Seeding host + podcast profile...")
-        asyncio.run(seed_host_and_podcast(
-            host_name="Steven Bartlett",
-            host_bio="Entrepreneur, investor, author of Happy Sexy Millionaire, "
-                     "CEO of Flight Story, former CEO of Social Chain. "
-                     "Investor in Huel, sits on the board of Huel.",
-            podcast_name="Diary of a CEO",
-            podcast_description="The Diary of a CEO is a podcast hosted by Steven Bartlett "
-                                "featuring interviews with world-class guests on business, "
-                                "health, relationships, and personal development.",
-            first_episode_date=earliest_date,
-        ))
+    # Ensure seed pages exist before processing
+    seed_wiki()
 
     for idx, ep in enumerate(episodes, 1):
-        if ep.get("knowledge_processed_at"):
-            print(f"[{idx}/{len(episodes)}] SKIP — already processed")
+        if ep.get("wiki_processed_at"):
+            print(f"[{idx}/{len(episodes)}] SKIP — wiki already processed")
             continue
 
         print(f"[{idx}/{len(episodes)}] {ep['youtube_id']} — {(ep.get('title') or '')[:50]}")
@@ -163,6 +153,14 @@ def main():
         run_stage2(episodes, prep_results)
 
     if args.stage in ("extract", "all"):
+        if not prep_results:
+            print("Loading speaker maps from DB...")
+            for ep in episodes:
+                prep_results[ep["id"]] = {
+                    "episode_id": ep["id"],
+                    "intro_end_position": ep.get("intro_end_position", 0),
+                    "speakers": ep.get("speaker_map") or {},
+                }
         run_stage3(episodes, prep_results, channel_slug=args.channel)
 
     if args.stage in ("enrich", "all"):
