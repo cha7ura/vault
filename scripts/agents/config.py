@@ -10,17 +10,41 @@ load_dotenv(ROOT_DIR / ".env.local")
 SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
-# LLM config — OpenRouter (preferred) or Ollama (fallback)
+# LLM config — Groq (preferred) > OpenRouter > Ollama (fallback)
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.6-plus:free")
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 
-# Use OpenRouter if key is set, otherwise Ollama
-USE_OPENROUTER = bool(OPENROUTER_API_KEY)
-LLM_BASE_URL = "https://openrouter.ai/api/v1" if USE_OPENROUTER else f"{OLLAMA_BASE_URL}/v1"
-LLM_API_KEY = OPENROUTER_API_KEY if USE_OPENROUTER else "ollama"
-LLM_MODEL = OPENROUTER_MODEL if USE_OPENROUTER else OLLAMA_MODEL
+# LLM provider priority: Groq > OpenRouter > Ollama
+if GROQ_API_KEY:
+    LLM_BASE_URL = "https://api.groq.com/openai/v1"
+    LLM_API_KEY = GROQ_API_KEY
+    LLM_MODEL = GROQ_MODEL
+    LLM_STRICT_JSON_SCHEMA = True
+elif OPENROUTER_API_KEY:
+    LLM_BASE_URL = "https://openrouter.ai/api/v1"
+    LLM_API_KEY = OPENROUTER_API_KEY
+    LLM_MODEL = OPENROUTER_MODEL
+    LLM_STRICT_JSON_SCHEMA = False
+else:
+    LLM_BASE_URL = f"{OLLAMA_BASE_URL}/v1"
+    LLM_API_KEY = "ollama"
+    LLM_MODEL = OLLAMA_MODEL
+    LLM_STRICT_JSON_SCHEMA = False
+
+# Wiki config
+WIKI_DIR = Path(os.environ.get("WIKI_DIR", str(ROOT_DIR / "wiki")))
+WIKI_EXTRACT_MODEL = os.environ.get("WIKI_EXTRACT_MODEL", "openai/gpt-oss-20b")
+WIKI_SUMMARY_MODEL = os.environ.get("WIKI_SUMMARY_MODEL", "deepseek/deepseek-chat")
+WIKI_LINT_MODEL = os.environ.get("WIKI_LINT_MODEL", "llama-3.1-8b-instant")
+
+# Embedder config — only needed for Graphiti (not required for wiki pipeline)
+EMBEDDER_API_KEY = os.environ.get("EMBEDDER_API_KEY", OPENROUTER_API_KEY)
+EMBEDDER_BASE_URL = "https://openrouter.ai/api/v1"
+EMBEDDER_MODEL = os.environ.get("EMBEDDER_MODEL", "qwen/qwen3-embedding-8b")
 
 # Neo4j config
 NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")

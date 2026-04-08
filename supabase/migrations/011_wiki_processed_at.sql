@@ -1,0 +1,1 @@
+ALTER TABLE episodes ADD COLUMN IF NOT EXISTS wiki_processed_at TIMESTAMP;
