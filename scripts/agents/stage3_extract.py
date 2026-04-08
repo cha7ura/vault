@@ -1,7 +1,7 @@
-"""Stage 3 — EXTRACT: Triage, chunk, Graphiti ingest."""
+"""Stage 3 — EXTRACT: Triage, chunk, wiki extraction."""
 from __future__ import annotations
 
-import sys
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,89 +11,10 @@ from scripts.agents.config import (
     FILLER_MAX_WORDS,
     CHUNK_DURATION,
     CHUNK_OVERLAP,
-    NEO4J_URI,
-    NEO4J_USER,
-    NEO4J_PASSWORD,
-    NEO4J_DATABASE,
-    LLM_BASE_URL,
-    LLM_API_KEY,
-    LLM_MODEL,
+    WIKI_DIR,
 )
-from scripts.agents.llm import llm_call
-from scripts.agents.prompts import TRIAGE_PROMPT
-
-# Add vendor/graphiti to path for podcast_vault imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "vendor" / "graphiti"))
-
-from podcast_vault.extract import TranscriptSegment, chunk_transcript
-from podcast_vault.ingest import (
-    ENTITY_TYPES,
-    EDGE_TYPES,
-    EDGE_TYPE_MAP,
-    GRAPHITI_EXTRACTION_INSTRUCTIONS,
-    build_episode_name,
-    build_source_description,
-    build_youtube_url,
-    format_timestamp,
-    build_group_id,
-)
-from podcast_vault.show_notes import extract_show_note_links
-
-
-# ---------------------------------------------------------------------------
-# Seed: pre-create host + podcast entities
-# ---------------------------------------------------------------------------
-
-async def seed_host_and_podcast(
-    host_name: str,
-    host_bio: str,
-    podcast_name: str,
-    podcast_description: str,
-    first_episode_date: str | None,
-):
-    """Pre-create host and podcast entities so episodes link to them correctly."""
-    import time as _time
-    from graphiti_core import Graphiti
-    from graphiti_core.llm_client import OpenAIClient, LLMConfig
-    from graphiti_core.embedder import OpenAIEmbedder, OpenAIEmbedderConfig
-    from graphiti_core.driver.neo4j_driver import Neo4jDriver
-
-    llm_config = LLMConfig(
-        api_key=LLM_API_KEY, base_url=LLM_BASE_URL,
-        model=LLM_MODEL, small_model=LLM_MODEL,
-    )
-    llm_client = OpenAIClient(llm_config)
-    embedder = OpenAIEmbedder(OpenAIEmbedderConfig(
-        api_key=LLM_API_KEY, base_url=LLM_BASE_URL,
-    ))
-    graph_driver = Neo4jDriver(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, database=NEO4J_DATABASE)
-
-    graphiti = Graphiti(llm_client=llm_client, embedder=embedder, graph_driver=graph_driver)
-
-    ref_time = datetime.fromisoformat(first_episode_date) if first_episode_date else datetime.now(timezone.utc)
-
-    seed_body = f"""{host_name} is a person who hosts {podcast_name}. {host_bio}
-
-{podcast_name}: {podcast_description}
-
-{host_name} hosts {podcast_name}."""
-
-    try:
-        t0 = _time.time()
-        await graphiti.add_episode(
-            name=f"seed-{podcast_name.lower().replace(' ', '-')}",
-            episode_body=seed_body,
-            source_description=f"Seed profile for {podcast_name} hosted by {host_name}",
-            group_id=build_group_id(podcast_name),
-            entity_types=ENTITY_TYPES,
-            edge_types=EDGE_TYPES,
-            edge_type_map=EDGE_TYPE_MAP,
-            custom_extraction_instructions=GRAPHITI_EXTRACTION_INSTRUCTIONS,
-            reference_time=ref_time,
-        )
-        print(f"    Seeded host + podcast in {_time.time() - t0:.1f}s")
-    finally:
-        await graphiti.close()
+from scripts.agents.wiki_extract import extract_chunk_json, write_episode_summary
+from scripts.agents.wiki_writer import merge_to_wiki, read_index, load_page
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +33,7 @@ def triage_segments(segments: list[dict]) -> list[dict]:
     """Filter out filler turns. Heuristic only — no LLM calls.
 
     Removes obvious filler (<=5 words, all filler phrases).
-    Everything else passes through — Graphiti extraction naturally
+    Everything else passes through — wiki extraction naturally
     ignores low-content turns during entity/edge extraction.
     """
     return [
@@ -125,20 +46,8 @@ def triage_segments(segments: list[dict]) -> list[dict]:
 # 3b. Chunk
 # ---------------------------------------------------------------------------
 
-def segments_to_transcript_segments(segments: list[dict]) -> list[TranscriptSegment]:
-    """Convert DB segments to podcast_vault TranscriptSegment objects."""
-    return [
-        TranscriptSegment(
-            text=seg.get("clean_text") or seg["text"],
-            start_time=seg["start_time"],
-            end_time=seg["end_time"],
-        )
-        for seg in segments
-    ]
-
-
 def build_graphiti_episode_body(segments: list[dict]) -> str:
-    """Format a chunk of segments for Graphiti ingestion."""
+    """Format a chunk of segments for wiki extraction."""
     lines = []
     for seg in segments:
         text = seg.get("clean_text") or seg["text"]
@@ -150,105 +59,81 @@ def build_graphiti_episode_body(segments: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 3c. Graphiti Ingest
+# 3c. Wiki Extraction
 # ---------------------------------------------------------------------------
 
-async def ingest_episode(
+def extract_and_write_episode(
     episode_id: str,
     youtube_id: str,
     episode_title: str,
-    podcast_name: str,
     published_at: str | None,
     segments: list[dict],
     speaker_map: dict[str, dict],
-):
-    """Chunk segments and ingest into Graphiti."""
-    from graphiti_core import Graphiti
-    from graphiti_core.llm_client import OpenAIClient, LLMConfig
-    from graphiti_core.embedder import OpenAIEmbedder, OpenAIEmbedderConfig
-    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+    wiki_dir: Path,
+) -> list[Path]:
+    """Chunk segments, extract JSON from each chunk via Groq, write to wiki.
+    Returns list of touched wiki page paths (used for episode summary).
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "vendor" / "graphiti"))
+    from podcast_vault.extract import TranscriptSegment, chunk_transcript
 
-    llm_config = LLMConfig(
-        api_key=LLM_API_KEY,
-        base_url=LLM_BASE_URL,
-        model=LLM_MODEL,
-        small_model=LLM_MODEL,
-    )
-    llm_client = OpenAIClient(llm_config)
+    # Add speaker names to segments
+    for seg in segments:
+        info = speaker_map.get(seg["speaker"], {})
+        seg["speaker_name"] = info.get("name", seg["speaker"])
 
-    embedder_config = OpenAIEmbedderConfig(
-        api_key=LLM_API_KEY,
-        base_url=LLM_BASE_URL,
-    )
-    embedder = OpenAIEmbedder(embedder_config)
+    # Convert to TranscriptSegments for chunking
+    ts_segments = [
+        TranscriptSegment(
+            text=seg.get("clean_text") or seg["text"],
+            start_time=seg["start_time"],
+            end_time=seg["end_time"],
+        )
+        for seg in segments
+    ]
+    chunks = chunk_transcript(ts_segments, CHUNK_DURATION, CHUNK_OVERLAP)
 
-    graph_driver = Neo4jDriver(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, database=NEO4J_DATABASE)
+    all_touched: list[Path] = []
 
-    graphiti = Graphiti(
-        llm_client=llm_client,
-        embedder=embedder,
-        graph_driver=graph_driver,
-    )
+    for chunk_idx, chunk in enumerate(chunks):
+        chunk_start = chunk[0].start_time
+        chunk_end = chunk[-1].end_time
 
-    try:
-        # Add speaker names to segments
-        for seg in segments:
-            info = speaker_map.get(seg["speaker"], {})
-            seg["speaker_name"] = info.get("name", seg["speaker"])
+        # Find matching original segments for this time window
+        chunk_segs = [
+            s for s in segments
+            if s["start_time"] < chunk_end and s["end_time"] > chunk_start
+        ]
+        if not chunk_segs:
+            continue
 
-        # Convert to TranscriptSegments for chunking
-        ts_segments = segments_to_transcript_segments(segments)
-        chunks = chunk_transcript(ts_segments, CHUNK_DURATION, CHUNK_OVERLAP)
+        chunk_text = build_graphiti_episode_body(chunk_segs)
 
-        # Map chunk indices back to original segments for speaker info
-        for chunk_idx, chunk in enumerate(chunks):
-            chunk_start = chunk[0].start_time
-            chunk_end = chunk[-1].end_time
+        # Read current index for deduplication
+        index_content = (wiki_dir / "_index.md").read_text(encoding="utf-8")
 
-            # Find matching original segments for this time window
-            chunk_segs = [
-                s for s in segments
-                if s["start_time"] < chunk_end and s["end_time"] > chunk_start
-            ]
+        # Extract entities + edges from this chunk
+        extraction = extract_chunk_json(chunk_text, index_content)
 
-            if not chunk_segs:
-                continue
+        # Stamp youtube_id on all edges and observations that lack an episode
+        for edge in extraction.get("edges", []):
+            edge.setdefault("episode", youtube_id)
+        for obs in extraction.get("observations", []):
+            obs.setdefault("episode", youtube_id)
 
-            body = build_graphiti_episode_body(chunk_segs)
-            start_seconds = int(chunk_start)
+        # Write to wiki (deterministic)
+        touched = merge_to_wiki(extraction, youtube_id, wiki_dir)
+        all_touched.extend(touched)
 
-            # Determine primary guest for this chunk
-            guest_name = "Unknown"
-            for seg in chunk_segs:
-                info = speaker_map.get(seg["speaker"], {})
-                if info.get("role") == "guest":
-                    guest_name = info.get("name", "Unknown")
-                    break
+        print(
+            f"    Chunk {chunk_idx + 1}/{len(chunks)} "
+            f"({int(chunk_start)}s-{int(chunk_end)}s): "
+            f"{len(extraction.get('entities', []))} entities, "
+            f"{len(extraction.get('edges', []))} edges"
+        )
 
-            await graphiti.add_episode(
-                name=build_episode_name(podcast_name, youtube_id, start_seconds),
-                episode_body=body,
-                source_description=build_source_description(
-                    episode_title=episode_title,
-                    podcast_name=podcast_name,
-                    guest=guest_name,
-                    start_time=format_timestamp(chunk_start),
-                    end_time=format_timestamp(chunk_end),
-                    youtube_url=build_youtube_url(youtube_id, start_seconds),
-                ),
-                group_id=build_group_id(podcast_name),
-                entity_types=ENTITY_TYPES,
-                edge_types=EDGE_TYPES,
-                edge_type_map=EDGE_TYPE_MAP,
-                custom_extraction_instructions=GRAPHITI_EXTRACTION_INSTRUCTIONS,
-                reference_time=datetime.fromisoformat(published_at) if published_at else datetime.now(timezone.utc),
-            )
-
-            print(f"    Chunk {chunk_idx + 1}/{len(chunks)} ingested "
-                  f"({format_timestamp(chunk_start)}-{format_timestamp(chunk_end)})")
-
-    finally:
-        await graphiti.close()
+    return all_touched
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +142,10 @@ async def ingest_episode(
 
 def parse_show_notes(description: str | None) -> dict:
     """Parse show notes URLs from episode description."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "vendor" / "graphiti"))
+    from podcast_vault.show_notes import extract_show_note_links
+
     if not description:
         return {"studies": [], "products": [], "guest_bio": [], "other": []}
 
@@ -274,8 +163,9 @@ def parse_show_notes(description: str | None) -> dict:
 # ---------------------------------------------------------------------------
 
 async def extract_episode(episode_id: str, speaker_map: dict[str, dict]) -> dict:
-    """Run Stage 3 extraction for a single episode."""
+    """Run Stage 3 wiki extraction for a single episode."""
     sb = get_supabase()
+    wiki_dir = WIKI_DIR
 
     # Fetch episode
     episode = sb.table("episodes").select("*").eq("id", episode_id).single().execute().data
@@ -311,24 +201,46 @@ async def extract_episode(episode_id: str, speaker_map: dict[str, dict]) -> dict
     substantive = triage_segments(content_segments)
     print(f"    Triage: {len(substantive)}/{len(content_segments)} substantive")
 
-    # 3b + 3c. Chunk and ingest
+    # 3b + 3c + 3d. Chunk → extract → write to wiki
+    touched_paths: list[Path] = []
     if substantive:
-        await ingest_episode(
+        touched_paths = extract_and_write_episode(
             episode_id=episode_id,
             youtube_id=youtube_id,
             episode_title=title,
-            podcast_name="Diary of a CEO",
             published_at=published_at,
             segments=substantive,
             speaker_map=speaker_map,
+            wiki_dir=wiki_dir,
         )
 
-    # 3d. Show notes
+    # 3e. Episode summary
+    if touched_paths:
+        touched_texts = []
+        for p in set(touched_paths):  # deduplicate
+            if p.exists():
+                touched_texts.append(p.read_text(encoding="utf-8"))
+
+        # Determine guest name for summary
+        guest_name = ""
+        for info in speaker_map.values():
+            if info.get("role") == "guest":
+                guest_name = info.get("name", "")
+                break
+
+        write_episode_summary(
+            episode={"youtube_id": youtube_id, "title": title,
+                     "published_at": published_at, "guest_name": guest_name},
+            touched_page_texts=touched_texts,
+            wiki_dir=wiki_dir,
+        )
+
+    # 3f. Show notes
     show_notes = parse_show_notes(description)
 
-    # 3e. Checkpoint
+    # 3g. Checkpoint
     sb.table("episodes").update({
-        "knowledge_processed_at": datetime.now(timezone.utc).isoformat(),
+        "wiki_processed_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", episode_id).execute()
 
     return {
