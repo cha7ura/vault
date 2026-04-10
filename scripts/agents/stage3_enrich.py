@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 
-from scripts.agents.config import get_supabase
+from scripts.agents.db import fetch_all, execute
 from scripts.agents.llm import llm_json_call
 from scripts.agents.search import searxng_search
 from scripts.agents.prompts import PROFILE_EXTRACTION_PROMPT, PERSONA_EXTRACTION_PROMPT
@@ -59,9 +59,7 @@ def extract_profile_from_search(name: str, search_results: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 def hydrate_person(person_id: str, name: str) -> dict | None:
-    """Search for a person and update their profile in Supabase."""
-    sb = get_supabase()
-
+    """Search for a person and update their profile in Aiven."""
     results = searxng_search(
         build_person_search_query(name),
         engines="google,wikipedia",
@@ -81,7 +79,12 @@ def hydrate_person(person_id: str, name: str) -> dict | None:
     if profile.get("photo_url"):
         update["photo_url"] = profile["photo_url"]
 
-    sb.table("people").update(update).eq("id", person_id).execute()
+    cols = list(update.keys())
+    set_clause = ", ".join(f"{c}=%s" for c in cols)
+    execute(
+        f"UPDATE people SET {set_clause} WHERE id=%s",
+        [update[c] for c in cols] + [person_id],
+    )
     return profile
 
 
@@ -91,18 +94,17 @@ def hydrate_person(person_id: str, name: str) -> dict | None:
 
 def extract_persona(person_id: str, name: str) -> dict | None:
     """Build a persona JSON from a person's recent substantive turns."""
-    sb = get_supabase()
-
     # Get recent substantive segments for this person
-    segments = (
-        sb.table("segments")
-        .select("clean_text, text")
-        .eq("person_id", person_id)
-        .not_.is_("clean_text", "null")
-        .order("created_at", desc=True)
-        .limit(100)
-        .execute()
-    ).data
+    segments = fetch_all(
+        """
+        SELECT clean_text, text
+        FROM segments
+        WHERE person_id=%s AND clean_text IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 100
+        """,
+        (person_id,),
+    )
 
     if not segments or len(segments) < 10:
         return None
@@ -116,9 +118,10 @@ def extract_persona(person_id: str, name: str) -> dict | None:
     persona = llm_json_call(prompt)
 
     if persona:
-        sb.table("people").update({
-            "persona_json": persona,
-        }).eq("id", person_id).execute()
+        execute(
+            "UPDATE people SET persona_json=%s WHERE id=%s",
+            (persona, person_id),
+        )
 
     return persona
 
@@ -129,15 +132,10 @@ def extract_persona(person_id: str, name: str) -> dict | None:
 
 def run_enrichment():
     """Run batch enrichment for all unenriched people."""
-    sb = get_supabase()
-
     # Find people without hydration
-    people = (
-        sb.table("people")
-        .select("id, name")
-        .is_("hydrated_at", "null")
-        .execute()
-    ).data
+    people = fetch_all(
+        "SELECT id, name FROM people WHERE hydrated_at IS NULL"
+    )
 
     print(f"Found {len(people)} people to hydrate")
 
@@ -151,12 +149,9 @@ def run_enrichment():
         time.sleep(2)  # Rate limit SearXNG
 
     # Persona extraction for people with enough data
-    people_with_data = (
-        sb.table("people")
-        .select("id, name, persona_json")
-        .is_("persona_json", "null")
-        .execute()
-    ).data
+    people_with_data = fetch_all(
+        "SELECT id, name, persona_json FROM people WHERE persona_json IS NULL"
+    )
 
     print(f"\nFound {len(people_with_data)} people for persona extraction")
 

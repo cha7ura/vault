@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 Vault Local Batch Ingest — processes YouTube channel videos oldest-first,
-transcribes with Whisper + NeMo MSDD, writes to Supabase, removes audio after each video.
+transcribes with Whisper + NeMo MSDD, writes to Aiven Postgres, removes audio after each video.
 
 Usage:
-    pip install python-dotenv faster-whisper yt-dlp supabase numpy<2.0 \
+    pip install python-dotenv faster-whisper yt-dlp psycopg2-binary numpy<2.0 \
         "nemo-toolkit[asr]>=2.dev" deepmultilingualpunctuation nltk torch torchaudio wget
     python scripts/local_batch_ingest.py
 
-Reads SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from .env.local
+Reads AIVEN_DATABASE_URL from .env.local
 """
 
 import json
@@ -27,19 +27,22 @@ import torch
 import torchaudio
 import faster_whisper
 import wget
-from dotenv import load_dotenv
 from omegaconf import OmegaConf
-from supabase import create_client, Client
 
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
 ROOT_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT_DIR / ".env.local")
 
-SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
-SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-sb: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+# Allow running as `python scripts/local_batch_ingest.py`
+sys.path.insert(0, str(ROOT_DIR))
+from scripts.agents.db import (  # noqa: E402
+    fetch_all,
+    fetch_one,
+    execute,
+    execute_returning,
+    execute_many,
+)
 
 # ---------------------------------------------------------------------------
 # Channel config
@@ -75,32 +78,39 @@ print(f"Channel: {CHANNEL_NAME} (@{CHANNEL_HANDLE})")
 nltk.download("punkt_tab", quiet=True)
 
 # ---------------------------------------------------------------------------
-# Supabase helpers
+# DB helpers
 # ---------------------------------------------------------------------------
 
 def ensure_channel() -> str:
-    result = sb.table("channels").select("id").eq("youtube_channel_id", CHANNEL_YOUTUBE_ID).execute()
-    if result.data:
-        print(f"  Channel exists: {result.data[0]['id']}")
-        return result.data[0]["id"]
-    row = sb.table("channels").insert({
-        "youtube_channel_id": CHANNEL_YOUTUBE_ID,
-        "name": CHANNEL_NAME,
-        "slug": CHANNEL_SLUG,
-    }).execute()
-    print(f"  Channel created: {row.data[0]['id']}")
-    return row.data[0]["id"]
+    existing = fetch_one(
+        "SELECT id FROM channels WHERE youtube_channel_id=%s",
+        (CHANNEL_YOUTUBE_ID,),
+    )
+    if existing:
+        print(f"  Channel exists: {existing['id']}")
+        return existing["id"]
+    row = execute_returning(
+        """
+        INSERT INTO channels (youtube_channel_id, name, slug)
+        VALUES (%s, %s, %s)
+        RETURNING id
+        """,
+        (CHANNEL_YOUTUBE_ID, CHANNEL_NAME, CHANNEL_SLUG),
+    )
+    print(f"  Channel created: {row['id']}")
+    return row["id"]
 
 
 def get_processed_ids(channel_id: str) -> set[str]:
-    rows = (
-        sb.table("episodes")
-        .select("youtube_id")
-        .eq("channel_id", channel_id)
-        .not_.is_("processed_at", "null")
-        .execute()
+    rows = fetch_all(
+        """
+        SELECT youtube_id
+        FROM episodes
+        WHERE channel_id=%s AND processed_at IS NOT NULL
+        """,
+        (channel_id,),
     )
-    return {r["youtube_id"] for r in rows.data}
+    return {r["youtube_id"] for r in rows}
 
 
 def get_channel_video_ids() -> list[str]:
@@ -119,18 +129,39 @@ def get_channel_video_ids() -> list[str]:
 def upsert_episode(channel_id: str, video_id: str, title: str,
                    duration: float = None, language: str = None,
                    num_speakers: int = None) -> str:
-    data = {"channel_id": channel_id, "youtube_id": video_id, "title": title}
+    """Insert or update episode by youtube_id; return its id."""
     if duration is not None:
-        data["duration_seconds"] = int(duration)
-    result = sb.table("episodes").upsert(data, on_conflict="youtube_id").execute()
-    return result.data[0]["id"]
+        row = execute_returning(
+            """
+            INSERT INTO episodes (channel_id, youtube_id, title, duration_seconds)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (youtube_id) DO UPDATE SET
+                channel_id = EXCLUDED.channel_id,
+                title = EXCLUDED.title,
+                duration_seconds = EXCLUDED.duration_seconds
+            RETURNING id
+            """,
+            (channel_id, video_id, title, int(duration)),
+        )
+    else:
+        row = execute_returning(
+            """
+            INSERT INTO episodes (channel_id, youtube_id, title)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (youtube_id) DO UPDATE SET
+                channel_id = EXCLUDED.channel_id,
+                title = EXCLUDED.title
+            RETURNING id
+            """,
+            (channel_id, video_id, title),
+        )
+    return row["id"]
 
 
 def insert_segments(episode_id: str, segments: list[dict]):
-    sb.table("segments").delete().eq("episode_id", episode_id).execute()
-    rows = []
-    for seg in segments:
-        rows.append({
+    execute("DELETE FROM segments WHERE episode_id=%s", (episode_id,))
+    rows = [
+        {
             "episode_id": episode_id,
             "speaker": seg["speaker"],
             "start_time": seg["start"],
@@ -139,16 +170,31 @@ def insert_segments(episode_id: str, segments: list[dict]):
             "tag": "content",
             "diarizer": "whisper-diarization",
             "words": seg.get("words", []),
-        })
-    for start in range(0, len(rows), 200):
-        sb.table("segments").insert(rows[start:start + 200]).execute()
+        }
+        for seg in segments
+    ]
+    if rows:
+        execute_many(
+            """
+            INSERT INTO segments (
+                episode_id, speaker, start_time, end_time, text,
+                tag, diarizer, words
+            ) VALUES (
+                %(episode_id)s, %(speaker)s, %(start_time)s, %(end_time)s, %(text)s,
+                %(tag)s, %(diarizer)s, %(words)s
+            )
+            """,
+            rows,
+            page_size=200,
+        )
     print(f"  Inserted {len(rows)} segments")
 
 
 def mark_complete(episode_id: str):
-    sb.table("episodes").update({
-        "processed_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", episode_id).execute()
+    execute(
+        "UPDATE episodes SET processed_at=%s WHERE id=%s",
+        (datetime.now(timezone.utc).isoformat(), episode_id),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -500,8 +546,8 @@ def main():
                 num_speakers = len(set(s["speaker"] for s in segments))
                 print(f"  {len(segments)} segments, {num_speakers} speakers, {duration:.0f}s")
 
-                # 7. Write to Supabase
-                print("  Writing to Supabase...")
+                # 7. Write to Aiven
+                print("  Writing to Aiven...")
                 episode_id = upsert_episode(channel_id, video_id, title, duration=duration,
                                             language=info.language, num_speakers=num_speakers)
                 insert_segments(episode_id, segments)

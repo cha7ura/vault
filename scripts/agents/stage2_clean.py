@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from scripts.agents.config import get_supabase, TEXT_CONFIDENCE_THRESHOLD, BATCH_INSERT_SIZE
+from scripts.agents.config import TEXT_CONFIDENCE_THRESHOLD, BATCH_INSERT_SIZE
+from scripts.agents.db import fetch_all, execute, execute_many
 from scripts.agents.stage1_prep import PrepResult
 
 
@@ -166,52 +167,33 @@ def validate_dialogue(segments: list[dict]) -> list[QualityIssue]:
 
 def clean_episode(episode_id: str, prep: PrepResult) -> dict:
     """Run Stage 2 for a single episode. Returns summary stats."""
-    sb = get_supabase()
-
-    # Fetch all segments (paginated)
-    all_segments = []
-    offset = 0
-    while True:
-        batch = (
-            sb.table("segments")
-            .select("id, position, speaker, text, start_time, end_time")
-            .eq("episode_id", episode_id)
-            .order("position")
-            .range(offset, offset + 999)
-            .execute()
-        ).data
-        if not batch:
-            break
-        all_segments.extend(batch)
-        if len(batch) < 1000:
-            break
-        offset += 1000
+    all_segments = fetch_all(
+        """
+        SELECT id, position, speaker, text, start_time, end_time
+        FROM segments
+        WHERE episode_id=%s
+        ORDER BY position
+        """,
+        (episode_id,),
+    )
 
     # Fetch YT segments (may be empty if fetch_yt_captions.py hasn't run)
-    all_yt = []
-    offset = 0
-    while True:
-        batch = (
-            sb.table("yt_segments")
-            .select("position, text")
-            .eq("episode_id", episode_id)
-            .order("position")
-            .range(offset, offset + 999)
-            .execute()
-        ).data
-        if not batch:
-            break
-        all_yt.extend(batch)
-        if len(batch) < 1000:
-            break
-        offset += 1000
+    all_yt = fetch_all(
+        """
+        SELECT position, text
+        FROM yt_segments
+        WHERE episode_id=%s
+        ORDER BY position
+        """,
+        (episode_id,),
+    )
 
     # Build YT lookup by position
     yt_by_pos = {seg["position"]: seg for seg in all_yt}
 
     # Filter out intro segments
     intro_end = prep["intro_end_position"]
-    content_segments = [s for s in all_segments if s["position"] >= intro_end]
+    content_segments = [s for s in all_segments if (s["position"] or 0) >= intro_end]
 
     # 2a + 2b: Merge text, assign speakers, compute confidence
     updates = []
@@ -238,12 +220,18 @@ def clean_episode(episode_id: str, prep: PrepResult) -> dict:
             flagged_count += 1
 
     # Batch update segments
-    for row in updates:
-        sb.table("segments").update({
-            "clean_text": row["clean_text"],
-            "text_confidence": row["text_confidence"],
-            "person_id": row["person_id"],
-        }).eq("id", row["id"]).execute()
+    if updates:
+        execute_many(
+            """
+            UPDATE segments
+            SET clean_text=%(clean_text)s,
+                text_confidence=%(text_confidence)s,
+                person_id=%(person_id)s
+            WHERE id=%(id)s
+            """,
+            updates,
+            page_size=BATCH_INSERT_SIZE,
+        )
 
     # 2c: Validate dialogue
     issues = validate_dialogue(content_segments)
@@ -261,9 +249,10 @@ def clean_episode(episode_id: str, prep: PrepResult) -> dict:
 
     # Save quality issues to episode
     if issues:
-        sb.table("episodes").update({
-            "quality_issues": [dict(i) for i in issues],
-        }).eq("id", episode_id).execute()
+        execute(
+            "UPDATE episodes SET quality_issues=%s WHERE id=%s",
+            ([dict(i) for i in issues], episode_id),
+        )
 
     return {
         "total_segments": len(content_segments),

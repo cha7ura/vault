@@ -12,23 +12,25 @@ import json
 import sys
 from pathlib import Path
 
-from scripts.agents.config import get_supabase, ROOT_DIR
+from scripts.agents.config import ROOT_DIR
+from scripts.agents.db import fetch_all, fetch_one
 
 
-def export_person(sb, person_id: str, person_name: str, person_slug: str, output_dir: Path):
+def export_person(person_id: str, person_name: str, person_slug: str, output_dir: Path):
     """Export a single person's agent memory to JSON."""
-    mem = (
-        sb.table("agent_memories")
-        .select("memory, memory_version, turns_processed, updated_at")
-        .eq("person_id", person_id)
-        .execute()
+    row = fetch_one(
+        """
+        SELECT memory, memory_version, turns_processed, updated_at
+        FROM agent_memories
+        WHERE person_id=%s
+        """,
+        (person_id,),
     )
 
-    if not mem.data:
+    if not row:
         print(f"  {person_name}: no memory found, skipping")
         return
 
-    row = mem.data[0]
     export = {
         "person_id": person_id,
         "name": person_name,
@@ -57,28 +59,30 @@ def main():
         print("Provide --channel or --person-slug")
         sys.exit(1)
 
-    sb = get_supabase()
     output_dir = ROOT_DIR / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.person_slug:
-        person = sb.table("people").select("id, name, slug").eq("slug", args.person_slug).execute()
-        if not person.data:
+        people = fetch_all(
+            "SELECT id, name, slug FROM people WHERE slug=%s",
+            (args.person_slug,),
+        )
+        if not people:
             print(f"Person '{args.person_slug}' not found")
             sys.exit(1)
-        people = person.data
     else:
-        all_memories = (
-            sb.table("agent_memories")
-            .select("person_id, people(id, name, slug)")
-            .execute()
+        people = fetch_all(
+            """
+            SELECT p.id, p.name, p.slug
+            FROM agent_memories am
+            JOIN people p ON p.id = am.person_id
+            """
         )
-        people = [row["people"] for row in all_memories.data if row.get("people")]
 
     print(f"Exporting {len(people)} agent memories to {output_dir}/\n")
 
     for person in people:
-        export_person(sb, person["id"], person["name"], person["slug"], output_dir)
+        export_person(person["id"], person["name"], person["slug"], output_dir)
 
     print(f"\nDone.")
 

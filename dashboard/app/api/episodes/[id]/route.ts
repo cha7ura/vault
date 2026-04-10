@@ -1,32 +1,40 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { fetchOne } from "@/lib/db";
+
+type Episode = {
+  id: string;
+  youtube_id: string;
+  title: string | null;
+  duration_seconds: number | null;
+};
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
-  // Try by UUID first, then by youtube_id
+  // Try by UUID first, then by youtube_id (same heuristic as before).
   const isUUID = /^[0-9a-f]{8}-/.test(id);
-  const col = isUUID ? "id" : "youtube_id";
+  const episode = await fetchOne<Episode>(
+    isUUID
+      ? `SELECT id, youtube_id, title, duration_seconds
+           FROM episodes WHERE id = $1`
+      : `SELECT id, youtube_id, title, duration_seconds
+           FROM episodes WHERE youtube_id = $1`,
+    [id],
+  );
 
-  const { data, error } = await supabase
-    .from("episodes")
-    .select("id, youtube_id, title, duration_seconds")
-    .eq(col, id)
-    .single();
-
-  if (error || !data) {
+  if (!episode) {
     return NextResponse.json({ error: "Episode not found" }, { status: 404 });
   }
 
   return NextResponse.json({
-    id: data.id,
-    youtube_id: data.youtube_id,
-    title: data.title,
+    id: episode.id,
+    youtube_id: episode.youtube_id,
+    title: episode.title,
     status: "ready",
-    duration: data.duration_seconds ?? null,
+    duration: episode.duration_seconds ?? null,
     intro_end_at: null,
   });
 }

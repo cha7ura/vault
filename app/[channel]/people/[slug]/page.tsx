@@ -1,4 +1,5 @@
-import { createServerClient } from '@/lib/supabase';
+import { fetchOne } from '@/lib/db';
+import { parseJsonb } from '@/lib/db';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -112,21 +113,30 @@ export default async function PersonPage({
   params: Promise<{ channel: string; slug: string }>;
 }) {
   const { channel, slug } = await params;
-  const supabase = createServerClient();
 
-  const { data: person } = await supabase
-    .from('people')
-    .select('id, name, slug, photo_url')
-    .eq('slug', slug)
-    .single();
+  const person = await fetchOne<{
+    id: string;
+    name: string;
+    slug: string;
+    photo_url: string | null;
+  }>(
+    'SELECT id, name, slug, photo_url FROM people WHERE slug = $1',
+    [slug],
+  );
 
   if (!person) return notFound();
 
-  const { data: memRow } = await supabase
-    .from('agent_memories')
-    .select('memory, memory_version, turns_processed, updated_at')
-    .eq('person_id', person.id)
-    .single();
+  const memRow = await fetchOne<{
+    memory: unknown;
+    memory_version: number;
+    turns_processed: number | null;
+    updated_at: string | null;
+  }>(
+    `SELECT memory, memory_version, turns_processed, updated_at
+       FROM agent_memories
+      WHERE person_id = $1`,
+    [person.id],
+  );
 
   if (!memRow) {
     return (
@@ -147,7 +157,9 @@ export default async function PersonPage({
     );
   }
 
-  const memory: MemorySchema = memRow.memory;
+  // JSONB is auto-decoded by node-postgres, but legacy rows may still be
+  // double-encoded strings — parseJsonb() handles both shapes safely.
+  const memory = (parseJsonb<MemorySchema>(memRow.memory) ?? {}) as MemorySchema;
   const persona = memory.persona;
   const semantic = memory.semantic_memory;
 

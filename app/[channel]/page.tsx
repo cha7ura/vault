@@ -1,34 +1,5 @@
-import { createServerClient } from '@/lib/supabase';
+import { getChannelBySlug } from '@/lib/channel';
 import { SearchComponent } from '@/components/search-bar';
-
-async function getChannel(slug: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('channels')
-    .select('*')
-    .eq('slug', slug)
-    .single();
-  return data;
-}
-
-async function getStats(channelId: string) {
-  const supabase = createServerClient();
-  
-  const [episodes, guests, insights] = await Promise.all([
-    supabase.from('episodes').select('id', { count: 'exact', head: true }).eq('channel_id', channelId),
-    supabase.from('guests').select('id', { count: 'exact', head: true }).eq('channel_id', channelId),
-    supabase.from('insights').select('id', { count: 'exact', head: true })
-      .in('episode_id', 
-        supabase.from('episodes').select('id').eq('channel_id', channelId)
-      ),
-  ]);
-
-  return {
-    episodes: episodes.count || 0,
-    guests: guests.count || 0,
-    insights: insights.count || 0,
-  };
-}
 
 export default async function ChannelHomePage({
   params,
@@ -36,7 +7,7 @@ export default async function ChannelHomePage({
   params: Promise<{ channel: string }>;
 }) {
   const { channel: channelSlug } = await params;
-  const channel = await getChannel(channelSlug);
+  const channel = await getChannelBySlug(channelSlug);
   if (!channel) return null;
 
   return (
@@ -52,7 +23,7 @@ export default async function ChannelHomePage({
               Explore episodes, insights, frameworks, and more
             </p>
           </div>
-          
+
           <SearchComponent channelSlug={channelSlug} />
         </div>
       </div>

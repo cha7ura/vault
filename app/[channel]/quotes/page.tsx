@@ -1,32 +1,36 @@
-import { createServerClient } from '@/lib/supabase';
+import { fetchAll } from '@/lib/db';
 import { InsightCard } from '@/components/insight-card';
 
+type InsightJoinRow = {
+  id: string;
+  episode_id: string;
+  guest_id: string | null;
+  type: string;
+  title: string | null;
+  content: string;
+  start_time_seconds: number | null;
+  end_time_seconds: number | null;
+  created_at: string | null;
+  episode_title: string | null;
+  [key: string]: unknown;
+};
+
 async function getQuotes(channelSlug: string) {
-  const supabase = createServerClient();
-  
-  const { data: channel } = await supabase
-    .from('channels')
-    .select('id')
-    .eq('slug', channelSlug)
-    .single();
-  
-  if (!channel) return [];
+  const rows = await fetchAll<InsightJoinRow>(
+    `SELECT i.*, e.title AS episode_title
+       FROM insights i
+       JOIN episodes e ON e.id = i.episode_id
+       JOIN channels c ON c.id = e.channel_id
+      WHERE c.slug = $1
+        AND i.type = 'quote'
+      ORDER BY i.created_at DESC NULLS LAST`,
+    [channelSlug],
+  );
 
-  const { data: episodes } = await supabase
-    .from('episodes')
-    .select('id')
-    .eq('channel_id', channel.id);
-  
-  if (!episodes || episodes.length === 0) return [];
-
-  const { data } = await supabase
-    .from('insights')
-    .select('*, episodes(title)')
-    .eq('type', 'quote')
-    .in('episode_id', episodes.map(e => e.id))
-    .order('created_at', { ascending: false });
-  
-  return data || [];
+  return rows.map(({ episode_title, ...insight }) => ({
+    ...insight,
+    episodes: episode_title ? { title: episode_title } : null,
+  }));
 }
 
 export default async function QuotesPage({
@@ -50,9 +54,10 @@ export default async function QuotesPage({
         {quotes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {quotes.map((quote) => (
-              <InsightCard 
-                key={quote.id} 
-                insight={quote}
+              <InsightCard
+                key={quote.id}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                insight={quote as any}
                 channelSlug={channel}
               />
             ))}

@@ -29,16 +29,22 @@ from pathlib import Path
 import requests
 
 # Allow running as `python scripts/agents/build_memory.py`
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import (
-    get_supabase,
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from scripts.agents.config import (
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
     FILLER_MAX_WORDS,
     FILLER_PHRASES,
     CONTEXT_WINDOW_TURNS,
 )
-from prompts import (
+from scripts.agents.db import (
+    fetch_all,
+    fetch_one,
+    fetch_value,
+    execute,
+    execute_returning,
+)
+from scripts.agents.prompts import (
     EMPTY_MEMORY,
     TRIAGE_PROMPT,
     MEMORY_MERGE_PROMPT,
@@ -151,7 +157,6 @@ def generate_episode_summary(
 # ---------------------------------------------------------------------------
 
 def process_person(
-    sb,
     person_id: str,
     person_name: str,
     channel_id: str,
@@ -160,17 +165,17 @@ def process_person(
     """Main loop: build memory for a single person across all their episodes."""
 
     # 1. Load or create agent_memories row
-    mem_rows = (
-        sb.table("agent_memories")
-        .select("*")
-        .eq("person_id", person_id)
-        .eq("channel_id", channel_id)
-        .limit(1)
-        .execute()
-    ).data
+    mem_row = fetch_one(
+        """
+        SELECT *
+        FROM agent_memories
+        WHERE person_id=%s AND channel_id=%s
+        LIMIT 1
+        """,
+        (person_id, channel_id),
+    )
 
-    if mem_rows:
-        mem_row = mem_rows[0]
+    if mem_row:
         memory = mem_row["memory"] or copy.deepcopy(EMPTY_MEMORY)
         last_episode_id = mem_row.get("last_episode_id")
         last_position = mem_row.get("last_position", 0)
@@ -179,19 +184,27 @@ def process_person(
     else:
         # Create new row
         now = datetime.now(timezone.utc).isoformat()
-        insert_data = {
-            "person_id": person_id,
-            "channel_id": channel_id,
-            "memory": copy.deepcopy(EMPTY_MEMORY),
-            "last_episode_id": None,
-            "last_position": 0,
-            "turns_processed": 0,
-            "memory_version": 0,
-            "created_at": now,
-            "updated_at": now,
-        }
-        result = sb.table("agent_memories").insert(insert_data).execute()
-        mem_row = result.data[0]
+        mem_row = execute_returning(
+            """
+            INSERT INTO agent_memories (
+                person_id, channel_id, memory, last_episode_id,
+                last_position, turns_processed, memory_version,
+                created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                person_id,
+                channel_id,
+                copy.deepcopy(EMPTY_MEMORY),
+                None,
+                0,
+                0,
+                0,
+                now,
+                now,
+            ),
+        )
         memory = copy.deepcopy(EMPTY_MEMORY)
         last_episode_id = None
         last_position = 0
@@ -201,23 +214,20 @@ def process_person(
     mem_id = mem_row["id"]
 
     # 2. Get episodes where person has mapped speaker_embeddings
-    episode_rows = (
-        sb.table("speaker_embeddings")
-        .select("episode_id, episodes(id, youtube_id, title, published_at)")
-        .eq("person_id", person_id)
-        .execute()
-    ).data
+    episodes = fetch_all(
+        """
+        SELECT DISTINCT e.id, e.youtube_id, e.title, e.published_at
+        FROM speaker_embeddings se
+        JOIN episodes e ON e.id = se.episode_id
+        WHERE se.person_id=%s
+        ORDER BY e.published_at ASC
+        """,
+        (person_id,),
+    )
 
-    if not episode_rows:
+    if not episodes:
         print(f"  No mapped episodes for {person_name}")
         return
-
-    # Deduplicate and sort by published_at ASC
-    episodes_map = {}
-    for row in episode_rows:
-        ep = row["episodes"]
-        episodes_map[ep["id"]] = ep
-    episodes = sorted(episodes_map.values(), key=lambda e: e["published_at"])
 
     # 3. If resume, skip to last checkpoint
     start_ep_idx = 0
@@ -240,35 +250,35 @@ def process_person(
         print(f"  [{ep_idx + 1}/{total_eps}] {ep['youtube_id']} — {ep['title']}")
 
         # Get person's speaker labels for this episode
-        person_embs = (
-            sb.table("speaker_embeddings")
-            .select("speaker_label")
-            .eq("episode_id", ep_id)
-            .eq("person_id", person_id)
-            .execute()
-        ).data
+        person_embs = fetch_all(
+            """
+            SELECT speaker_label
+            FROM speaker_embeddings
+            WHERE episode_id=%s AND person_id=%s
+            """,
+            (ep_id, person_id),
+        )
         person_labels = {e["speaker_label"] for e in person_embs}
 
         # Determine role (host appears in most episodes)
         role = "participant"
-        host_check = (
-            sb.table("speaker_embeddings")
-            .select("person_id", count="exact")
-            .eq("person_id", person_id)
-            .execute()
-        )
-        total_appearances = host_check.count or 0
+        total_appearances = fetch_value(
+            "SELECT COUNT(*) FROM speaker_embeddings WHERE person_id=%s",
+            (person_id,),
+        ) or 0
         if total_appearances > total_eps * 0.5:
             role = "host"
 
         # Load ALL segments for this episode (need context)
-        segments = (
-            sb.table("segments")
-            .select("position, speaker, text")
-            .eq("episode_id", ep_id)
-            .order("position", desc=False)
-            .execute()
-        ).data
+        segments = fetch_all(
+            """
+            SELECT position, speaker, text
+            FROM segments
+            WHERE episode_id=%s
+            ORDER BY position ASC
+            """,
+            (ep_id,),
+        )
 
         if not segments:
             continue
@@ -328,13 +338,18 @@ def process_person(
             # Checkpoint every 10 turns
             if ep_turns_processed % 10 == 0:
                 now = datetime.now(timezone.utc).isoformat()
-                sb.table("agent_memories").update({
-                    "memory": memory,
-                    "last_episode_id": ep_id,
-                    "last_position": pos,
-                    "turns_processed": turns_processed,
-                    "updated_at": now,
-                }).eq("id", mem_id).execute()
+                execute(
+                    """
+                    UPDATE agent_memories
+                    SET memory=%s,
+                        last_episode_id=%s,
+                        last_position=%s,
+                        turns_processed=%s,
+                        updated_at=%s
+                    WHERE id=%s
+                    """,
+                    (memory, ep_id, pos, turns_processed, now, mem_id),
+                )
 
             # Print progress every 50 turns
             if ep_turns_processed % 50 == 0:
@@ -358,14 +373,27 @@ def process_person(
         # 6. Save checkpoint after episode
         memory_version += 1
         now = datetime.now(timezone.utc).isoformat()
-        sb.table("agent_memories").update({
-            "memory": memory,
-            "last_episode_id": ep_id,
-            "last_position": segments[-1]["position"] if segments else 0,
-            "turns_processed": turns_processed,
-            "memory_version": memory_version,
-            "updated_at": now,
-        }).eq("id", mem_id).execute()
+        execute(
+            """
+            UPDATE agent_memories
+            SET memory=%s,
+                last_episode_id=%s,
+                last_position=%s,
+                turns_processed=%s,
+                memory_version=%s,
+                updated_at=%s
+            WHERE id=%s
+            """,
+            (
+                memory,
+                ep_id,
+                segments[-1]["position"] if segments else 0,
+                turns_processed,
+                memory_version,
+                now,
+                mem_id,
+            ),
+        )
 
         print(f"    ✓ {len(person_turns_this_ep)} substantive turns, version {memory_version}")
 
@@ -409,55 +437,35 @@ def main():
         print("Make sure Ollama is running: ollama serve")
         sys.exit(1)
 
-    sb = get_supabase()
-
     # Resolve channel
-    channel_rows = (
-        sb.table("channels")
-        .select("id, name")
-        .eq("slug", args.channel)
-        .execute()
-    ).data
-    if not channel_rows:
+    channel = fetch_one(
+        "SELECT id, name FROM channels WHERE slug=%s",
+        (args.channel,),
+    )
+    if not channel:
         print(f"Error: channel '{args.channel}' not found.")
         sys.exit(1)
 
-    channel = channel_rows[0]
     channel_id = channel["id"]
     print(f"Channel: {channel['name']} ({channel_id})\n")
 
-    # Get people with mapped embeddings for this channel
-    # Find all episodes for this channel, then all speaker_embeddings with person_id
-    episode_rows = (
-        sb.table("episodes")
-        .select("id")
-        .eq("channel_id", channel_id)
-        .execute()
-    ).data
-    if not episode_rows:
-        print("No episodes found for this channel.")
-        return
+    # Get distinct mapped people for this channel via a single JOIN
+    people_rows = fetch_all(
+        """
+        SELECT DISTINCT p.id, p.name, p.slug
+        FROM speaker_embeddings se
+        JOIN episodes e ON e.id = se.episode_id
+        JOIN people p ON p.id = se.person_id
+        WHERE e.channel_id=%s AND se.person_id IS NOT NULL
+        """,
+        (channel_id,),
+    )
 
-    episode_ids = [e["id"] for e in episode_rows]
-
-    # Get distinct person_ids from speaker_embeddings
-    people_set: dict[str, dict] = {}
-    for ep_id in episode_ids:
-        emb_rows = (
-            sb.table("speaker_embeddings")
-            .select("person_id, people(id, name, slug)")
-            .eq("episode_id", ep_id)
-            .not_.is_("person_id", "null")
-            .execute()
-        ).data
-        for row in emb_rows:
-            pid = row["person_id"]
-            if pid not in people_set and row.get("people"):
-                people_set[pid] = row["people"]
-
-    if not people_set:
+    if not people_rows:
         print("No mapped people found. Run map_speakers.py first.")
         return
+
+    people_set: dict[str, dict] = {p["id"]: p for p in people_rows}
 
     # Filter to single person if specified
     if args.person_slug:
@@ -475,7 +483,6 @@ def main():
     for person_id, person_info in people_set.items():
         print(f"--- {person_info['name']} ({person_info['slug']}) ---")
         process_person(
-            sb,
             person_id=person_id,
             person_name=person_info["name"],
             channel_id=channel_id,

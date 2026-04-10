@@ -8,21 +8,10 @@ Usage:
 """
 
 import json
-import os
 import subprocess
-import sys
 from datetime import datetime
-from pathlib import Path
 
-from dotenv import load_dotenv
-from supabase import create_client
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT_DIR / ".env.local")
-
-SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+from scripts.agents.db import fetch_all, execute
 
 
 def fetch_yt_metadata(video_id: str) -> dict | None:
@@ -38,8 +27,9 @@ def fetch_yt_metadata(video_id: str) -> dict | None:
 
 
 def hydrate():
-    rows = sb.table("episodes").select("id, youtube_id, title, description, thumbnail_url, published_at").execute()
-    episodes = rows.data
+    episodes = fetch_all(
+        "SELECT id, youtube_id, title, description, thumbnail_url, published_at FROM episodes"
+    )
     print(f"Found {len(episodes)} episodes")
 
     needs_hydration = [
@@ -80,8 +70,13 @@ def hydrate():
             update["duration_seconds"] = int(meta["duration"])
 
         if update:
-            sb.table("episodes").update(update).eq("id", ep["id"]).execute()
-            print(f"    Updated: {', '.join(update.keys())}")
+            cols = list(update.keys())
+            set_clause = ", ".join(f"{c}=%s" for c in cols)
+            execute(
+                f"UPDATE episodes SET {set_clause} WHERE id=%s",
+                [update[c] for c in cols] + [ep["id"]],
+            )
+            print(f"    Updated: {', '.join(cols)}")
         else:
             print(f"    Already complete")
 

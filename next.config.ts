@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ['neo4j-driver'],
   images: {
     remotePatterns: [
       {
@@ -10,10 +11,6 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'yt3.ggpht.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.supabase.co',
       },
       {
         protocol: 'https',

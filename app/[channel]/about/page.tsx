@@ -1,31 +1,29 @@
-import { createServerClient } from '@/lib/supabase';
+import { getChannelBySlug } from '@/lib/channel';
+import { fetchValue } from '@/lib/db';
 import { format } from 'date-fns';
 
-async function getChannel(slug: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('channels')
-    .select('*')
-    .eq('slug', slug)
-    .single();
-  return data;
-}
-
 async function getStats(channelId: string) {
-  const supabase = createServerClient();
-  
-  const [episodesResult, guestsResult, insightsResult, booksResult] = await Promise.all([
-    supabase.from('episodes').select('id', { count: 'exact', head: true }).eq('channel_id', channelId),
-    supabase.from('guests').select('id', { count: 'exact', head: true }).eq('channel_id', channelId),
-    supabase.from('insights').select('id', { count: 'exact', head: true }),
-    supabase.from('books').select('id', { count: 'exact', head: true }),
+  // Episodes and guests have a direct channel_id; insights and books are
+  // counted globally (mirroring the pre-migration Supabase call, which
+  // intentionally ignored the channel filter on those tables).
+  const [episodes, guests, insights, books] = await Promise.all([
+    fetchValue<number>(
+      'SELECT COUNT(*)::int FROM episodes WHERE channel_id = $1',
+      [channelId],
+    ),
+    fetchValue<number>(
+      'SELECT COUNT(*)::int FROM guests WHERE channel_id = $1',
+      [channelId],
+    ),
+    fetchValue<number>('SELECT COUNT(*)::int FROM insights'),
+    fetchValue<number>('SELECT COUNT(*)::int FROM books'),
   ]);
 
   return {
-    episodes: episodesResult.count || 0,
-    guests: guestsResult.count || 0,
-    insights: insightsResult.count || 0,
-    books: booksResult.count || 0,
+    episodes: episodes ?? 0,
+    guests: guests ?? 0,
+    insights: insights ?? 0,
+    books: books ?? 0,
   };
 }
 
@@ -35,7 +33,7 @@ export default async function AboutPage({
   params: Promise<{ channel: string }>;
 }) {
   const { channel: channelSlug } = await params;
-  const channel = await getChannel(channelSlug);
+  const channel = await getChannelBySlug(channelSlug);
   if (!channel) return null;
 
   const stats = await getStats(channel.id);
@@ -45,7 +43,7 @@ export default async function AboutPage({
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-3xl font-bold mb-6">About {channel.name}</h1>
-          
+
           {channel.description && (
             <p className="text-muted-foreground mb-8">{channel.description}</p>
           )}
@@ -72,7 +70,7 @@ export default async function AboutPage({
           <div className="bg-card border rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Powered by Vault</h2>
             <p className="text-muted-foreground mb-4">
-              This vault uses AI to automatically extract insights from podcast episodes, 
+              This vault uses AI to automatically extract insights from podcast episodes,
               including frameworks, quotes, book recommendations, and more.
             </p>
             <ul className="space-y-2 text-sm text-muted-foreground">
@@ -81,7 +79,7 @@ export default async function AboutPage({
               <li>• <strong>Search</strong>: Meilisearch + pgvector hybrid search</li>
               <li>• <strong>Guest Research</strong>: Firecrawl web search</li>
             </ul>
-            
+
             {channel.last_synced_at && (
               <p className="text-xs text-muted-foreground mt-4">
                 Last synced: {format(new Date(channel.last_synced_at), 'PPp')}

@@ -1,7 +1,17 @@
-import { createServerClient } from '@/lib/supabase';
+import { fetchOne, fetchAll } from '@/lib/db';
 import { Users } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+
+type PersonWithMemory = {
+  id: string;
+  name: string;
+  slug: string;
+  photo_url: string | null;
+  memory_version: number;
+  turns_processed: number | null;
+  updated_at: string | null;
+};
 
 export default async function PeoplePage({
   params,
@@ -9,14 +19,14 @@ export default async function PeoplePage({
   params: Promise<{ channel: string }>;
 }) {
   const { channel } = await params;
-  const supabase = createServerClient();
 
-  // Get channel
-  const { data: channelData } = await supabase
-    .from('channels')
-    .select('id, name')
-    .eq('slug', channel)
-    .single();
+  // Verify the channel exists so the sidebar / routing stays consistent.
+  // agent_memories is a global table (no channel_id), so the list itself is
+  // not filtered by channel — we're just gating the page on a valid slug.
+  const channelData = await fetchOne<{ id: string; name: string }>(
+    'SELECT id, name FROM channels WHERE slug = $1',
+    [channel],
+  );
 
   if (!channelData) {
     return (
@@ -24,22 +34,15 @@ export default async function PeoplePage({
     );
   }
 
-  // Get all people who have agent memories
-  const { data: memoryRows } = await supabase
-    .from('agent_memories')
-    .select(
-      'person_id, memory_version, turns_processed, updated_at, people(id, name, slug, photo_url)'
-    )
-    .order('updated_at', { ascending: false });
-
-  const peopleWithMemory = (memoryRows || [])
-    .filter((row: any) => row.people)
-    .map((row: any) => ({
-      ...row.people,
-      memory_version: row.memory_version,
-      turns_processed: row.turns_processed,
-      updated_at: row.updated_at,
-    }));
+  // Flat JOIN replaces Supabase's FK expansion
+  // `people(id, name, slug, photo_url)`.
+  const peopleWithMemory = await fetchAll<PersonWithMemory>(
+    `SELECT p.id, p.name, p.slug, p.photo_url,
+            am.memory_version, am.turns_processed, am.updated_at
+       FROM agent_memories am
+       JOIN people p ON p.id = am.person_id
+      ORDER BY am.updated_at DESC NULLS LAST`,
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,7 +67,7 @@ export default async function PeoplePage({
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {peopleWithMemory.map((person: any) => (
+            {peopleWithMemory.map((person) => (
               <Link
                 key={person.id}
                 href={`/${channel}/people/${person.slug}`}

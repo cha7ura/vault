@@ -1,15 +1,5 @@
-import { createServerClient } from '@/lib/supabase';
+import { getChannelBySlug } from '@/lib/channel';
 import { ChatInterface } from '@/components/chat-interface';
-
-async function getChannel(slug: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('channels')
-    .select('*')
-    .eq('slug', slug)
-    .single();
-  return data;
-}
 
 export default async function AskPage({
   params,
@@ -17,7 +7,7 @@ export default async function AskPage({
   params: Promise<{ channel: string }>;
 }) {
   const { channel: channelSlug } = await params;
-  const channel = await getChannel(channelSlug);
+  const channel = await getChannelBySlug(channelSlug);
   if (!channel) return null;
 
   return (

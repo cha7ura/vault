@@ -1,10 +1,10 @@
 #!/usr/bin/env npx tsx
 /**
  * Guest Hydration Pipeline - Multi-tenant
- * 
+ *
  * Uses Firecrawl web search to research guest profiles and enrich them
  * with additional information like bio, social links, books authored, etc.
- * 
+ *
  * Usage:
  *   npx tsx scripts/hydrate-guests.ts --channel "https://www.youtube.com/@TheDiaryOfACEO"
  *   npx tsx scripts/hydrate-guests.ts --channel UCrPseYLGpNygVi34QpGNqpA --guest-id <uuid>
@@ -14,7 +14,7 @@
 import { Command } from 'commander';
 import { searchWeb, FirecrawlSource } from '../lib/firecrawl';
 import { chat } from '../lib/openrouter';
-import { createServerClient } from '../lib/supabase';
+import { fetchOne, fetchAll, execute } from '../lib/db';
 import { resolveChannelId } from '../lib/youtube';
 
 interface GuestProfile {
@@ -32,6 +32,14 @@ interface ChannelRecord {
   name: string;
   slug: string;
 }
+
+type GuestRow = {
+  id: string;
+  name: string;
+  channel_id: string;
+  bio: string | null;
+  hydrated_at: string | null;
+};
 
 /**
  * Synthesize a guest profile from web search results using LLM
@@ -89,13 +97,13 @@ Return ONLY valid JSON, no explanation.`;
   try {
     const jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const profile = JSON.parse(jsonStr);
-    
+
     return {
       bio: profile.bio || '',
-      photo_url: profile.photo_url || null,
-      twitter: profile.twitter || null,
-      linkedin: profile.linkedin || null,
-      website: profile.website || null,
+      photo_url: profile.photo_url || undefined,
+      twitter: profile.twitter || undefined,
+      linkedin: profile.linkedin || undefined,
+      website: profile.website || undefined,
       books_authored: Array.isArray(profile.books_authored) ? profile.books_authored : [],
       companies: Array.isArray(profile.companies) ? profile.companies : [],
     };
@@ -115,7 +123,6 @@ Return ONLY valid JSON, no explanation.`;
 async function hydrateGuest(
   guestId: string,
   guestName: string,
-  serverClient: ReturnType<typeof createServerClient>
 ): Promise<boolean> {
   try {
     console.log(`\n🔍 Researching: ${guestName}`);
@@ -127,7 +134,7 @@ async function hydrateGuest(
     ];
 
     const allSources: FirecrawlSource[] = [];
-    
+
     for (const query of searchQueries) {
       try {
         console.log(`   Searching: "${query}"`);
@@ -158,23 +165,28 @@ async function hydrateGuest(
     }
 
     console.log('   Updating database...');
-    const { error } = await serverClient
-      .from('guests')
-      .update({
-        bio: profile.bio,
-        photo_url: profile.photo_url,
-        twitter: profile.twitter,
-        linkedin: profile.linkedin,
-        website: profile.website,
-        books_authored: profile.books_authored.length > 0 ? profile.books_authored : null,
-        companies: profile.companies.length > 0 ? profile.companies : null,
-        hydrated_at: new Date().toISOString(),
-      })
-      .eq('id', guestId);
-
-    if (error) {
-      throw new Error(`Database update failed: ${error.message}`);
-    }
+    await execute(
+      `UPDATE guests
+          SET bio = $1,
+              photo_url = $2,
+              twitter = $3,
+              linkedin = $4,
+              website = $5,
+              books_authored = $6::jsonb,
+              companies = $7::jsonb,
+              hydrated_at = NOW()
+        WHERE id = $8`,
+      [
+        profile.bio,
+        profile.photo_url ?? null,
+        profile.twitter ?? null,
+        profile.linkedin ?? null,
+        profile.website ?? null,
+        profile.books_authored.length > 0 ? JSON.stringify(profile.books_authored) : null,
+        profile.companies.length > 0 ? JSON.stringify(profile.companies) : null,
+        guestId,
+      ],
+    );
 
     console.log(`   ✅ Hydrated: ${guestName}`);
     console.log(`      Bio: ${profile.bio.substring(0, 100)}...`);
@@ -208,7 +220,7 @@ async function main() {
     .option('--all-channels', 'Hydrate guests from all channels')
     .option('-g, --guest-id <uuid>', 'Hydrate a specific guest by ID')
     .option('-n, --name <name>', 'Hydrate a guest by name')
-    .option('-l, --limit <number>', 'Maximum number of guests to hydrate', parseInt)
+    .option('-l, --limit <number>', 'Maximum number of guests to hydrate', (v) => parseInt(v, 10))
     .option('--rehydrate', 'Re-hydrate guests that have already been hydrated')
     .option('--dry-run', 'Show what would be hydrated without actually doing it')
     .parse(process.argv);
@@ -236,61 +248,67 @@ async function main() {
     process.exit(1);
   }
 
-  const serverClient = createServerClient();
-
   // Resolve channel if specified
-  let channelId: string | null = null;
   let channelRecord: ChannelRecord | null = null;
 
   if (options.channel) {
     console.log(`Resolving channel: ${options.channel}`);
     const youtubeChannelId = await resolveChannelId(options.channel);
-    
-    const { data: channel } = await serverClient
-      .from('channels')
-      .select('id, name, slug')
-      .eq('youtube_channel_id', youtubeChannelId)
-      .single();
 
-    if (!channel) {
+    channelRecord = await fetchOne<ChannelRecord>(
+      `SELECT id, name, slug
+         FROM channels
+        WHERE youtube_channel_id = $1`,
+      [youtubeChannelId],
+    );
+
+    if (!channelRecord) {
       console.error(`❌ Channel not found in database. Run ingestion first.`);
       process.exit(1);
     }
 
-    channelRecord = channel;
-    channelId = channel.id;
-    console.log(`✓ Channel: ${channel.name} (${channel.slug})\n`);
+    console.log(`✓ Channel: ${channelRecord.name} (${channelRecord.slug})\n`);
   }
 
-  // Build query
-  let query = serverClient.from('guests').select('id, name, channel_id, bio, hydrated_at');
+  // Build WHERE clause dynamically. Each filter appends a `$N` placeholder.
+  const where: string[] = [];
+  const params: unknown[] = [];
 
   if (options.guestId) {
-    query = query.eq('id', options.guestId);
-  } else if (channelId) {
-    query = query.eq('channel_id', channelId);
+    params.push(options.guestId);
+    where.push(`id = $${params.length}`);
+  } else if (channelRecord) {
+    params.push(channelRecord.id);
+    where.push(`channel_id = $${params.length}`);
   }
-  
+
   if (options.name) {
-    query = query.ilike('name', `%${options.name}%`);
+    params.push(`%${options.name}%`);
+    where.push(`name ILIKE $${params.length}`);
   }
-  
+
   if (!options.rehydrate && !options.guestId) {
-    query = query.is('hydrated_at', null);
+    where.push(`hydrated_at IS NULL`);
   }
 
+  let sql = `SELECT id, name, channel_id, bio, hydrated_at FROM guests`;
+  if (where.length > 0) sql += ` WHERE ${where.join(' AND ')}`;
+  sql += ` ORDER BY name`;
   if (options.limit) {
-    query = query.limit(options.limit);
+    params.push(options.limit);
+    sql += ` LIMIT $${params.length}`;
   }
 
-  const { data: guests, error } = await query;
-
-  if (error) {
-    console.error(`❌ Failed to fetch guests: ${error.message}`);
+  let guests: GuestRow[];
+  try {
+    guests = await fetchAll<GuestRow>(sql, params);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Failed to fetch guests: ${message}`);
     process.exit(1);
   }
 
-  if (!guests || guests.length === 0) {
+  if (guests.length === 0) {
     console.log('✅ No guests to hydrate!');
     return;
   }
@@ -314,7 +332,7 @@ async function main() {
     const guest = guests[i];
     console.log(`\n[${i + 1}/${guests.length}]`);
 
-    const success = await hydrateGuest(guest.id, guest.name, serverClient);
+    const success = await hydrateGuest(guest.id, guest.name);
 
     if (success) {
       successCount++;

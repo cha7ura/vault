@@ -1,9 +1,9 @@
 #!/usr/bin/env npx tsx
 /**
  * Bulk Ingestion CLI - Multi-tenant
- * 
+ *
  * Downloads and processes YouTube videos from ANY channel.
- * 
+ *
  * Usage:
  *   npx tsx scripts/bulk-ingest.ts --channel "https://www.youtube.com/@TheDiaryOfACEO" --limit 10
  *   npx tsx scripts/bulk-ingest.ts --channel UCrPseYLGpNygVi34QpGNqpA --all
@@ -14,20 +14,25 @@ import { Command } from 'commander';
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync, unlinkSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
-import { 
-  fetchChannelVideos, 
+import {
   fetchAllChannelVideos,
-  parseDuration, 
-  getVideoById, 
+  parseDuration,
+  getVideoById,
   getChannelInfo,
   resolveChannelId,
   generateChannelSlug,
-  YouTubeVideo 
+  YouTubeVideo,
 } from '../lib/youtube';
 import { transcribeLocalAudio } from './transcribe-local';
 import { extractAllContent, extractGuestInfo } from './extract-insights';
 import { embed, embedBatch } from '../lib/openrouter';
-import { createServerClient } from '../lib/supabase';
+import {
+  fetchAll,
+  fetchOne,
+  execute,
+  executeReturning,
+  vecStr,
+} from '../lib/db';
 import { meilisearch, INDEXES, initializeIndexes } from '../lib/meilisearch';
 
 // Configuration
@@ -47,6 +52,8 @@ interface ChannelRecord {
   name: string;
   slug: string;
 }
+
+type EpisodeRow = { id: string };
 
 /**
  * Extract URLs from text (for references)
@@ -86,22 +93,22 @@ async function downloadAudio(videoId: string): Promise<string> {
   }
 
   const outputPath = path.join(AUDIO_DIR, `${videoId}.mp3`);
-  
+
   if (existsSync(outputPath)) {
     console.log(`  Audio already cached: ${outputPath}`);
     return outputPath;
   }
 
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  
+
   console.log(`  Downloading audio for ${videoId}...`);
-  
+
   try {
     execSync(
       `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" "${videoUrl}"`,
       { stdio: 'pipe' }
     );
-    
+
     console.log(`  ✓ Audio downloaded: ${outputPath}`);
     return outputPath;
   } catch (error: any) {
@@ -118,7 +125,7 @@ function cleanupAudio(audioPath: string): void {
       unlinkSync(audioPath);
       console.log(`  Cleaned up: ${audioPath}`);
     }
-  } catch (error) {
+  } catch {
     console.warn(`  Warning: Could not clean up ${audioPath}`);
   }
 }
@@ -127,15 +134,15 @@ function cleanupAudio(audioPath: string): void {
  * Get or create channel in database
  */
 async function getOrCreateChannel(
-  serverClient: ReturnType<typeof createServerClient>,
-  youtubeChannelId: string
+  youtubeChannelId: string,
 ): Promise<ChannelRecord> {
   // Check if channel exists
-  const { data: existing } = await serverClient
-    .from('channels')
-    .select('id, youtube_channel_id, name, slug')
-    .eq('youtube_channel_id', youtubeChannelId)
-    .single();
+  const existing = await fetchOne<ChannelRecord>(
+    `SELECT id, youtube_channel_id, name, slug
+       FROM channels
+      WHERE youtube_channel_id = $1`,
+    [youtubeChannelId],
+  );
 
   if (existing) {
     return existing;
@@ -144,30 +151,62 @@ async function getOrCreateChannel(
   // Fetch channel info from YouTube
   console.log('Fetching channel info from YouTube...');
   const channelInfo = await getChannelInfo(youtubeChannelId);
-  
+
   // Create channel
   const slug = generateChannelSlug(channelInfo.title);
-  const { data: newChannel, error } = await serverClient
-    .from('channels')
-    .insert({
-      youtube_channel_id: youtubeChannelId,
-      name: channelInfo.title,
-      slug: slug,
-      description: channelInfo.description,
-      thumbnail_url: channelInfo.thumbnailUrl,
-      banner_url: channelInfo.bannerUrl,
-      subscriber_count: channelInfo.subscriberCount,
-      video_count: channelInfo.videoCount,
-    })
-    .select()
-    .single();
+  const newChannel = await executeReturning<ChannelRecord>(
+    `INSERT INTO channels
+       (youtube_channel_id, name, slug, description,
+        thumbnail_url, banner_url, subscriber_count, video_count)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, youtube_channel_id, name, slug`,
+    [
+      youtubeChannelId,
+      channelInfo.title,
+      slug,
+      channelInfo.description,
+      channelInfo.thumbnailUrl,
+      channelInfo.bannerUrl,
+      channelInfo.subscriberCount,
+      channelInfo.videoCount,
+    ],
+  );
 
-  if (error) {
-    throw new Error(`Failed to create channel: ${error.message}`);
+  if (!newChannel) {
+    throw new Error('Failed to create channel');
   }
 
   console.log(`✓ Created channel: ${channelInfo.title} (${slug})`);
   return newChannel;
+}
+
+/**
+ * Build a multi-row INSERT with positional placeholders. Callers may pass
+ * `casts` keyed by column *index* to apply a per-column type cast (e.g.
+ * `{ 5: 'vector' }` to render the 6th placeholder as `$N::vector`) which
+ * is how pgvector values are inserted alongside regular columns.
+ */
+function buildMultiRowInsert(
+  table: string,
+  columns: string[],
+  rows: unknown[][],
+  casts: Record<number, string> = {},
+): { sql: string; params: unknown[] } {
+  const colList = columns.join(', ');
+  const placeholders: string[] = [];
+  const params: unknown[] = [];
+
+  rows.forEach((row, i) => {
+    const slots = row.map((_, j) => {
+      const ph = `$${i * columns.length + j + 1}`;
+      return casts[j] ? `${ph}::${casts[j]}` : ph;
+    });
+    placeholders.push(`(${slots.join(', ')})`);
+    params.push(...row);
+  });
+
+  const sql = `INSERT INTO ${table} (${colList}) VALUES ${placeholders.join(', ')}`;
+  return { sql, params };
 }
 
 /**
@@ -176,8 +215,7 @@ async function getOrCreateChannel(
 async function processVideo(
   video: YouTubeVideo,
   channel: ChannelRecord,
-  serverClient: ReturnType<typeof createServerClient>,
-  options: { keepAudio?: boolean }
+  options: { keepAudio?: boolean },
 ): Promise<boolean> {
   let audioPath: string | null = null;
 
@@ -199,7 +237,9 @@ async function processVideo(
     // Step 3: Extract insights
     console.log('  Extracting insights with AI...');
     const extracted = await extractAllContent(transcript.text, video.description);
-    console.log(`  ✓ Extracted: ${extracted.frameworks.length} frameworks, ${extracted.insights.length} insights, ${extracted.books.length} books`);
+    console.log(
+      `  ✓ Extracted: ${extracted.frameworks.length} frameworks, ${extracted.insights.length} insights, ${extracted.books.length} books`,
+    );
 
     // Step 3b: Extract guest info
     console.log('  Extracting guest information...');
@@ -208,149 +248,194 @@ async function processVideo(
 
     // Step 4: Generate embeddings
     console.log('  Generating embeddings...');
-    const textForEmbedding = video.title + ' ' + video.description + ' ' + transcript.text.substring(0, 5000);
+    const textForEmbedding =
+      video.title + ' ' + video.description + ' ' + transcript.text.substring(0, 5000);
     const [episodeEmbedding, insightEmbeddings] = await Promise.all([
       embed(textForEmbedding),
-      extracted.insights.length > 0 
-        ? embedBatch(extracted.insights.map(i => i.title + ' ' + i.content))
-        : Promise.resolve([]),
+      extracted.insights.length > 0
+        ? embedBatch(extracted.insights.map((i) => i.title + ' ' + i.content))
+        : Promise.resolve([] as number[][]),
     ]);
     console.log('  ✓ Embeddings generated');
 
-    // Step 5: Store in Supabase
-    console.log('  Storing in Supabase...');
+    // Step 5: Store in Postgres
+    console.log('  Storing in database...');
     const durationSeconds = parseDuration(video.duration);
 
-    // Upsert episode with channel_id
-    const { data: episode, error: episodeError } = await serverClient
-      .from('episodes')
-      .upsert({
-        channel_id: channel.id,
-        youtube_id: video.id,
-        title: video.title,
-        description: video.description,
-        thumbnail_url: video.thumbnailUrl,
-        duration_seconds: durationSeconds,
-        published_at: video.publishedAt,
-        transcript: transcript.text,
-        transcript_formatted: extracted.formattedTranscript,
-        embedding: episodeEmbedding,
-        references: extractUrlsFromText(video.description),
-        processed_at: new Date().toISOString(),
-      }, { onConflict: 'channel_id,youtube_id' })
-      .select()
-      .single();
+    // Upsert episode. Uses the `channels.id, youtube_id` composite unique
+    // index (the same one the old Supabase upsert used via onConflict).
+    const episode = await executeReturning<EpisodeRow>(
+      `INSERT INTO episodes
+         (channel_id, youtube_id, title, description, thumbnail_url,
+          duration_seconds, published_at, transcript, transcript_formatted,
+          embedding, "references", processed_at)
+       VALUES
+         ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11::jsonb, NOW())
+       ON CONFLICT (channel_id, youtube_id) DO UPDATE SET
+         title = EXCLUDED.title,
+         description = EXCLUDED.description,
+         thumbnail_url = EXCLUDED.thumbnail_url,
+         duration_seconds = EXCLUDED.duration_seconds,
+         published_at = EXCLUDED.published_at,
+         transcript = EXCLUDED.transcript,
+         transcript_formatted = EXCLUDED.transcript_formatted,
+         embedding = EXCLUDED.embedding,
+         "references" = EXCLUDED."references",
+         processed_at = EXCLUDED.processed_at
+       RETURNING id`,
+      [
+        channel.id,
+        video.id,
+        video.title,
+        video.description,
+        video.thumbnailUrl,
+        durationSeconds,
+        video.publishedAt,
+        transcript.text,
+        extracted.formattedTranscript,
+        vecStr(episodeEmbedding),
+        JSON.stringify(extractUrlsFromText(video.description)),
+      ],
+    );
 
-    if (episodeError) {
-      throw new Error(`Failed to insert episode: ${episodeError.message}`);
+    if (!episode) {
+      throw new Error('Failed to insert episode');
     }
 
-    // Insert insights
+    // Insert insights. Delete-then-insert preserves the Supabase semantics
+    // where a re-run of the ingester fully replaces the episode's insights.
     if (extracted.insights.length > 0) {
-      await serverClient.from('insights').delete().eq('episode_id', episode.id);
-      
-      const insightsToInsert = extracted.insights.map((insight, idx) => ({
-        episode_id: episode.id,
-        type: insight.type,
-        title: insight.title,
-        content: insight.content,
-        start_time_seconds: insight.timestamp,
-        embedding: insightEmbeddings[idx],
-      }));
+      await execute(`DELETE FROM insights WHERE episode_id = $1`, [episode.id]);
 
-      await serverClient.from('insights').insert(insightsToInsert);
+      const rows = extracted.insights.map((insight, idx) => [
+        episode.id,
+        insight.type,
+        insight.title,
+        insight.content,
+        insight.timestamp,
+        vecStr(insightEmbeddings[idx] ?? []),
+      ]);
+      const { sql, params } = buildMultiRowInsert(
+        'insights',
+        ['episode_id', 'type', 'title', 'content', 'start_time_seconds', 'embedding'],
+        rows,
+        { 5: 'vector' },
+      );
+      await execute(sql, params);
     }
 
     // Insert frameworks as insights
     if (extracted.frameworks.length > 0) {
       const frameworkEmbeddings = await embedBatch(
-        extracted.frameworks.map(f => f.title + ' ' + f.content)
+        extracted.frameworks.map((f) => f.title + ' ' + f.content),
       );
 
-      const frameworksToInsert = extracted.frameworks.map((framework, idx) => ({
-        episode_id: episode.id,
-        type: 'framework' as const,
-        title: framework.title,
-        content: framework.content,
-        start_time_seconds: framework.timestamp,
-        embedding: frameworkEmbeddings[idx],
-      }));
-
-      await serverClient.from('insights').insert(frameworksToInsert);
+      const rows = extracted.frameworks.map((framework, idx) => [
+        episode.id,
+        'framework',
+        framework.title,
+        framework.content,
+        framework.timestamp,
+        vecStr(frameworkEmbeddings[idx] ?? []),
+      ]);
+      const { sql, params } = buildMultiRowInsert(
+        'insights',
+        ['episode_id', 'type', 'title', 'content', 'start_time_seconds', 'embedding'],
+        rows,
+        { 5: 'vector' },
+      );
+      await execute(sql, params);
     }
 
     // Insert books
     if (extracted.books.length > 0) {
-      await serverClient.from('books').delete().eq('episode_id', episode.id);
-      await serverClient.from('books').insert(
-        extracted.books.map(book => ({
-          episode_id: episode.id,
-          title: book.title,
-          author: book.author,
-          context: book.context,
-          timestamp_seconds: book.timestamp,
-        }))
+      await execute(`DELETE FROM books WHERE episode_id = $1`, [episode.id]);
+      const rows = extracted.books.map((book) => [
+        episode.id,
+        book.title,
+        book.author,
+        book.context,
+        book.timestamp,
+      ]);
+      const { sql, params } = buildMultiRowInsert(
+        'books',
+        ['episode_id', 'title', 'author', 'context', 'timestamp_seconds'],
+        rows,
       );
+      await execute(sql, params);
     }
 
     // Insert papers
     if (extracted.papers.length > 0) {
-      await serverClient.from('papers').delete().eq('episode_id', episode.id);
-      await serverClient.from('papers').insert(
-        extracted.papers.map(paper => ({
-          episode_id: episode.id,
-          title: paper.title,
-          authors: paper.authors,
-          url: paper.url,
-          context: paper.context,
-          timestamp_seconds: paper.timestamp,
-        }))
+      await execute(`DELETE FROM papers WHERE episode_id = $1`, [episode.id]);
+      const rows = extracted.papers.map((paper) => [
+        episode.id,
+        paper.title,
+        paper.authors,
+        paper.url,
+        paper.context,
+        paper.timestamp,
+      ]);
+      const { sql, params } = buildMultiRowInsert(
+        'papers',
+        ['episode_id', 'title', 'authors', 'url', 'context', 'timestamp_seconds'],
+        rows,
       );
+      await execute(sql, params);
     }
 
     // Store guest info (with channel_id)
     if (guests.length > 0) {
       for (const guest of guests) {
-        const slug = guest.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        
+        const slug = guest.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+
         // Check if guest already exists for this channel
-        const { data: existingGuest } = await serverClient
-          .from('guests')
-          .select('id')
-          .eq('channel_id', channel.id)
-          .eq('slug', slug)
-          .single();
+        const existingGuest = await fetchOne<{ id: string }>(
+          `SELECT id FROM guests WHERE channel_id = $1 AND slug = $2`,
+          [channel.id, slug],
+        );
 
         let guestId: string;
 
         if (existingGuest) {
           guestId = existingGuest.id;
         } else {
-          const { data: newGuest, error: guestError } = await serverClient
-            .from('guests')
-            .insert({
-              channel_id: channel.id,
-              name: guest.name,
-              slug: slug,
-              bio: guest.role ? `${guest.role}${guest.company ? ` at ${guest.company}` : ''}` : null,
-            })
-            .select()
-            .single();
-
-          if (guestError) {
-            console.warn(`  Warning: Could not create guest ${guest.name}: ${guestError.message}`);
+          try {
+            const newGuest = await executeReturning<{ id: string }>(
+              `INSERT INTO guests (channel_id, name, slug, bio)
+               VALUES ($1, $2, $3, $4)
+               RETURNING id`,
+              [
+                channel.id,
+                guest.name,
+                slug,
+                guest.role
+                  ? `${guest.role}${guest.company ? ` at ${guest.company}` : ''}`
+                  : null,
+              ],
+            );
+            if (!newGuest) continue;
+            guestId = newGuest.id;
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`  Warning: Could not create guest ${guest.name}: ${message}`);
             continue;
           }
-          guestId = newGuest.id;
         }
 
-        await serverClient
-          .from('episode_guests')
-          .upsert({ episode_id: episode.id, guest_id: guestId }, { onConflict: 'episode_id,guest_id' });
+        await execute(
+          `INSERT INTO episode_guests (episode_id, guest_id)
+           VALUES ($1, $2)
+           ON CONFLICT (episode_id, guest_id) DO NOTHING`,
+          [episode.id, guestId],
+        );
       }
     }
 
-    console.log('  ✓ Stored in Supabase');
+    console.log('  ✓ Stored in database');
 
     // Step 6: Index in Meilisearch with channel info
     console.log('  Indexing in Meilisearch...');
@@ -378,11 +463,11 @@ async function processVideo(
     return true;
   } catch (error: any) {
     console.error(`❌ Failed to process ${video.id}: ${error.message}`);
-    
+
     if (audioPath && !options.keepAudio) {
       cleanupAudio(audioPath);
     }
-    
+
     return false;
   }
 }
@@ -398,7 +483,7 @@ async function main() {
     .description('Bulk ingest YouTube videos from any channel into Vault')
     .version('2.0.0')
     .requiredOption('-c, --channel <url>', 'YouTube channel URL or ID (required)')
-    .option('-l, --limit <number>', 'Maximum number of videos to process', parseInt)
+    .option('-l, --limit <number>', 'Maximum number of videos to process', (v) => parseInt(v, 10))
     .option('-a, --all', 'Process all videos from the channel')
     .option('-s, --skip-existing', 'Skip videos that have already been processed')
     .option('-v, --video-id <id>', 'Process a specific video by ID')
@@ -417,8 +502,7 @@ async function main() {
     'YOUTUBE_API_KEY',
     'DEEPGRAM_API_KEY',
     'OPENROUTER_API_KEY',
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'SUPABASE_SERVICE_ROLE_KEY',
+    'AIVEN_DATABASE_URL',
   ];
 
   for (const envVar of requiredEnvVars) {
@@ -444,16 +528,15 @@ async function main() {
   console.log(`✓ YouTube Channel ID: ${youtubeChannelId}\n`);
 
   // Initialize services
-  const serverClient = createServerClient();
   await initializeIndexes();
 
   // Get or create channel
-  const channel = await getOrCreateChannel(serverClient, youtubeChannelId);
+  const channel = await getOrCreateChannel(youtubeChannelId);
   console.log(`📺 Channel: ${channel.name} (${channel.slug})\n`);
 
   // Load progress
-  const progress = options.resume 
-    ? loadProgress(youtubeChannelId) 
+  const progress = options.resume
+    ? loadProgress(youtubeChannelId)
     : { channelId: youtubeChannelId, processedVideoIds: [], lastRun: new Date().toISOString() };
 
   // Get videos to process
@@ -468,7 +551,7 @@ async function main() {
     }
     videos = [video];
   } else {
-    const limit = options.all ? undefined : (options.limit || 10);
+    const limit = options.all ? undefined : options.limit || 10;
     console.log(`Fetching ${limit ? `up to ${limit}` : 'all'} videos from channel...`);
     videos = await fetchAllChannelVideos(youtubeChannelId, limit);
   }
@@ -477,22 +560,24 @@ async function main() {
 
   // Filter out already processed
   if (options.skipExisting) {
-    const { data: existingEpisodes } = await serverClient
-      .from('episodes')
-      .select('youtube_id')
-      .eq('channel_id', channel.id)
-      .not('processed_at', 'is', null);
+    const existingEpisodes = await fetchAll<{ youtube_id: string }>(
+      `SELECT youtube_id
+         FROM episodes
+        WHERE channel_id = $1
+          AND processed_at IS NOT NULL`,
+      [channel.id],
+    );
 
-    const existingIds = new Set(existingEpisodes?.map(e => e.youtube_id) || []);
+    const existingIds = new Set(existingEpisodes.map((e) => e.youtube_id));
     const originalCount = videos.length;
-    videos = videos.filter(v => !existingIds.has(v.id));
+    videos = videos.filter((v) => !existingIds.has(v.id));
     console.log(`Skipping ${originalCount - videos.length} already processed videos\n`);
   }
 
   // Filter based on local progress if resuming
   if (options.resume && progress.processedVideoIds.length > 0) {
     const progressIds = new Set(progress.processedVideoIds);
-    videos = videos.filter(v => !progressIds.has(v.id));
+    videos = videos.filter((v) => !progressIds.has(v.id));
     console.log(`Resuming: Skipping ${progress.processedVideoIds.length} previously processed videos\n`);
   }
 
@@ -518,7 +603,7 @@ async function main() {
     const video = videos[i];
     console.log(`\n[${i + 1}/${videos.length}]`);
 
-    const success = await processVideo(video, channel, serverClient, {
+    const success = await processVideo(video, channel, {
       keepAudio: options.keepAudio,
     });
 
@@ -533,15 +618,15 @@ async function main() {
 
     if (i < videos.length - 1) {
       console.log('\n⏳ Waiting 2 seconds before next video...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
   }
 
   // Update channel last_synced_at
-  await serverClient
-    .from('channels')
-    .update({ last_synced_at: new Date().toISOString() })
-    .eq('id', channel.id);
+  await execute(
+    `UPDATE channels SET last_synced_at = NOW() WHERE id = $1`,
+    [channel.id],
+  );
 
   // Summary
   console.log('\n=======================');
@@ -553,7 +638,7 @@ async function main() {
   console.log(`📁 Total: ${videos.length}`);
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });

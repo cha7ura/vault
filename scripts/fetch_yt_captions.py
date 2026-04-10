@@ -11,20 +11,13 @@ Usage:
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-from supabase import create_client
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT_DIR / ".env.local")
-
-SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Allow running as `python scripts/fetch_yt_captions.py`
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts.agents.db import fetch_all, fetch_one, fetch_value, execute, execute_many
 
 BATCH_INSERT_SIZE = 500
 
@@ -150,41 +143,43 @@ def slice_words_to_segments(
             "start_time": seg_start,
             "end_time": seg_end,
             "text": text,
-            "words": json.dumps(seg_words),
+            "words": seg_words,  # list → auto-adapted to JSONB
         })
 
     return results
 
 
 def get_segments_for_episode(episode_id: str) -> list[dict]:
-    """Fetch segments for an episode, ordered by position."""
-    rows = (
-        sb.table("segments")
-        .select("episode_id, start_time, end_time")
-        .eq("episode_id", episode_id)
-        .order("start_time")
-        .execute()
+    """Fetch segments for an episode, ordered by start_time."""
+    return fetch_all(
+        """
+        SELECT episode_id, start_time, end_time
+        FROM segments
+        WHERE episode_id=%s
+        ORDER BY start_time
+        """,
+        (episode_id,),
     )
-    return rows.data
 
 
 def episode_has_yt_segments(episode_id: str) -> bool:
     """Check if yt_segments already exist for this episode."""
-    rows = (
-        sb.table("yt_segments")
-        .select("id", count="exact")
-        .eq("episode_id", episode_id)
-        .limit(1)
-        .execute()
+    count = fetch_value(
+        "SELECT COUNT(*) FROM yt_segments WHERE episode_id=%s",
+        (episode_id,),
     )
-    return (rows.count or 0) > 0
+    return (count or 0) > 0
 
 
 def batch_insert_yt_segments(records: list[dict]):
     """Insert yt_segment records in chunks of BATCH_INSERT_SIZE."""
+    sql = """
+        INSERT INTO yt_segments (episode_id, position, start_time, end_time, text, words)
+        VALUES (%(episode_id)s, %(position)s, %(start_time)s, %(end_time)s, %(text)s, %(words)s)
+    """
     for i in range(0, len(records), BATCH_INSERT_SIZE):
         chunk = records[i : i + BATCH_INSERT_SIZE]
-        sb.table("yt_segments").insert(chunk).execute()
+        execute_many(sql, chunk, page_size=BATCH_INSERT_SIZE)
         print(f"    Inserted {len(chunk)} yt_segments (batch {i // BATCH_INSERT_SIZE + 1})")
 
 
@@ -196,7 +191,7 @@ def process_episode(episode_id: str, youtube_id: str, force: bool = False) -> bo
 
     # If forcing, delete existing yt_segments first
     if force:
-        sb.table("yt_segments").delete().eq("episode_id", episode_id).execute()
+        execute("DELETE FROM yt_segments WHERE episode_id=%s", (episode_id,))
 
     # Fetch segments for time boundaries
     segments = get_segments_for_episode(episode_id)
@@ -228,17 +223,14 @@ def process_episode(episode_id: str, youtube_id: str, force: bool = False) -> bo
 
 def run_single(youtube_id: str, force: bool):
     """Process a single episode by YouTube video ID."""
-    rows = (
-        sb.table("episodes")
-        .select("id, youtube_id")
-        .eq("youtube_id", youtube_id)
-        .execute()
+    ep = fetch_one(
+        "SELECT id, youtube_id FROM episodes WHERE youtube_id=%s",
+        (youtube_id,),
     )
-    if not rows.data:
+    if not ep:
         print(f"Episode with youtube_id={youtube_id} not found in database")
         sys.exit(1)
 
-    ep = rows.data[0]
     print(f"Processing {youtube_id} (episode {ep['id']})")
     success = process_episode(ep["id"], youtube_id, force=force)
     if success:
@@ -249,8 +241,7 @@ def run_single(youtube_id: str, force: bool):
 
 def run_all(force: bool):
     """Process all episodes missing YT captions."""
-    rows = sb.table("episodes").select("id, youtube_id, title").execute()
-    episodes = rows.data
+    episodes = fetch_all("SELECT id, youtube_id, title FROM episodes")
     print(f"Found {len(episodes)} episodes")
 
     to_process = []

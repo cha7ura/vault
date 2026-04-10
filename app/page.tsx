@@ -1,14 +1,24 @@
 import Link from 'next/link';
-import { createServerClient } from '@/lib/supabase';
+import { fetchAll } from '@/lib/db';
 import { Play, Plus, ArrowRight } from 'lucide-react';
 
+type ChannelRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  video_count: number | null;
+  subscriber_count: number | null;
+};
+
 async function getChannels() {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('channels')
-    .select('*')
-    .order('name');
-  return data || [];
+  return fetchAll<ChannelRow>(
+    `SELECT id, slug, name, description, thumbnail_url,
+            video_count, subscriber_count
+       FROM channels
+      ORDER BY name`,
+  );
 }
 
 export default async function HomePage() {
@@ -95,17 +105,11 @@ export default async function HomePage() {
               <div className="flex-1">
                 <h2 className="text-xl font-semibold mb-2">Add a Channel</h2>
                 <p className="text-muted-foreground mb-4">
-                  Use the CLI or n8n to ingest a new YouTube channel:
+                  Use the CLI to ingest a new YouTube channel:
                 </p>
                 <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                  <code>npm run ingest -- --channel "https://www.youtube.com/@YourChannel" --limit 10</code>
+                  <code>npm run ingest -- --channel &quot;https://www.youtube.com/@YourChannel&quot; --limit 10</code>
                 </div>
-                <p className="text-sm text-muted-foreground mt-4">
-                  Or trigger via n8n webhook at{' '}
-                  <code className="bg-muted px-1.5 py-0.5 rounded text-xs">
-                    POST /webhook/ingest-channel
-                  </code>
-                </p>
               </div>
             </div>
           </div>

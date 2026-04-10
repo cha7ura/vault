@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     default_whisper_model: str = "medium.en"
     default_diarizer: str = "whisper-diarization"
 
+    # HuggingFace (only needed for PyAnnote model download)
+    hf_token: str = ""
+
     model_config = {"env_prefix": "VAULT_", "env_file": ".env"}
 
     def model_post_init(self, __context) -> None:

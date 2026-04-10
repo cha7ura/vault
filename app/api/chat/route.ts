@@ -1,7 +1,20 @@
 import { NextResponse } from 'next/server';
 import { embed } from '@/lib/openrouter';
-import { supabase } from '@/lib/supabase';
+import { fetchAll, vecStr } from '@/lib/db';
 import OpenAI from 'openai';
+
+type EpisodeHit = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  similarity: number;
+};
+type InsightHit = {
+  id: string;
+  title: string | null;
+  content: string;
+  similarity: number;
+};
 
 export async function POST(request: Request) {
   try {
@@ -13,22 +26,38 @@ export async function POST(request: Request) {
 
     const userQuery = query || messages[messages.length - 1]?.content;
 
-    // Semantic search for context (with optional channel filter)
+    // Semantic search over episodes + insights (with optional channel filter).
+    // Cosine distance (`<=>`) → similarity = 1 - distance.
     const queryEmbedding = await embed(userQuery);
-    
-    const { data: episodes } = await supabase.rpc('semantic_search_episodes', {
-      query_embedding: queryEmbedding,
-      p_channel_id: channelId || null,
-      match_count: 5,
-      match_threshold: 0.5,
-    });
+    const queryVec = vecStr(queryEmbedding);
 
-    const { data: insights } = await supabase.rpc('semantic_search_insights', {
-      query_embedding: queryEmbedding,
-      p_channel_id: channelId || null,
-      match_count: 5,
-      match_threshold: 0.5,
-    });
+    const [episodes, insights] = await Promise.all([
+      fetchAll<EpisodeHit>(
+        `SELECT id, title, description,
+                1 - (embedding <=> $1::vector) AS similarity
+           FROM episodes
+          WHERE embedding IS NOT NULL
+            AND ($2::uuid IS NULL OR channel_id = $2::uuid)
+            AND 1 - (embedding <=> $1::vector) > $3
+          ORDER BY embedding <=> $1::vector
+          LIMIT $4`,
+        [queryVec, channelId || null, 0.5, 5],
+      ),
+      // Insights don't have a direct channel_id; join through episodes
+      // so the optional channel filter still works.
+      fetchAll<InsightHit>(
+        `SELECT i.id, i.title, i.content,
+                1 - (i.embedding <=> $1::vector) AS similarity
+           FROM insights i
+           JOIN episodes e ON e.id = i.episode_id
+          WHERE i.embedding IS NOT NULL
+            AND ($2::uuid IS NULL OR e.channel_id = $2::uuid)
+            AND 1 - (i.embedding <=> $1::vector) > $3
+          ORDER BY i.embedding <=> $1::vector
+          LIMIT $4`,
+        [queryVec, channelId || null, 0.5, 5],
+      ),
+    ]);
 
     // Build context from search results
     let context = '';
@@ -46,10 +75,10 @@ export async function POST(request: Request) {
     }
 
     // Build system message based on channel context
-    const channelContext = channelName 
+    const channelContext = channelName
       ? `You are a helpful assistant for the "${channelName}" channel vault.`
       : 'You are a helpful assistant for this YouTube channel vault.';
-    
+
     const systemMessage = `${channelContext}
 Answer questions about episodes, guests, insights, frameworks, and more based on the provided context.
 Be concise and helpful. If you don't know something, say so.
@@ -60,9 +89,7 @@ Always cite which episode your information comes from when possible.`;
       ...(messages || []).slice(-10),
       {
         role: 'user' as const,
-        content: context
-          ? `${userQuery}\n\nContext:\n${context}`
-          : userQuery,
+        content: context ? `${userQuery}\n\nContext:\n${context}` : userQuery,
       },
     ];
 
@@ -86,7 +113,9 @@ Always cite which episode your information comes from when possible.`;
         for await (const chunk of stream) {
           const content = chunk.choices[0]?.delta?.content || '';
           if (content) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ content })}\n\n`),
+            );
           }
         }
         controller.close();
@@ -102,9 +131,6 @@ Always cite which episode your information comes from when possible.`;
     });
   } catch (error) {
     console.error('Chat error:', error);
-    return NextResponse.json(
-      { error: 'Chat failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Chat failed' }, { status: 500 });
   }
 }

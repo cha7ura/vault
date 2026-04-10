@@ -1,7 +1,20 @@
 import { NextResponse } from 'next/server';
-import { searchEpisodes, searchInsights } from '@/lib/meilisearch';
-import { supabase } from '@/lib/supabase';
+import { searchEpisodes } from '@/lib/meilisearch';
+import { fetchOne, fetchAll, vecStr } from '@/lib/db';
 import { embed } from '@/lib/openrouter';
+
+// Used by the semantic branch below. `similarity` is cosine similarity
+// (1 - cosine distance) computed inline from pgvector's `<=>` operator.
+type SemanticEpisodeRow = {
+  id: string;
+  youtube_id: string;
+  title: string | null;
+  description: string | null;
+  thumbnail_url: string | null;
+  published_at: string | null;
+  channel_id: string;
+  similarity: number;
+};
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -15,39 +28,55 @@ export async function GET(request: Request) {
 
   try {
     // Resolve channel_id from slug if needed
-    let resolvedChannelId = channelId;
+    let resolvedChannelId: string | null = channelId;
     if (!resolvedChannelId && channelSlug) {
-      const { data: channel } = await supabase
-        .from('channels')
-        .select('id')
-        .eq('slug', channelSlug)
-        .single();
-      resolvedChannelId = channel?.id;
+      const channel = await fetchOne<{ id: string }>(
+        'SELECT id FROM channels WHERE slug=$1',
+        [channelSlug],
+      );
+      resolvedChannelId = channel?.id ?? null;
     }
 
     // Hybrid search: Meilisearch (keyword) + pgvector (semantic)
     const [keywordResults, semanticResults] = await Promise.all([
-      // Meilisearch keyword search
-      searchEpisodes(query, { 
+      searchEpisodes(query, {
         channelId: resolvedChannelId || undefined,
-        limit: 20 
+        limit: 20,
       }),
-      // Semantic search via Supabase
       (async () => {
         const queryEmbedding = await embed(query);
-        const { data, error } = await supabase.rpc('semantic_search_episodes', {
-          query_embedding: queryEmbedding,
-          p_channel_id: resolvedChannelId || null,
-          match_count: 20,
-          match_threshold: 0.5,
-        });
-        if (error) throw error;
-        return data || [];
+        // Cosine distance (`<=>`) → similarity = 1 - distance.
+        // Filter by threshold and optional channel; order by distance so
+        // the planner can use the ivfflat index on `embedding`.
+        return fetchAll<SemanticEpisodeRow>(
+          `SELECT id, youtube_id, title, description, thumbnail_url,
+                  published_at, channel_id,
+                  1 - (embedding <=> $1::vector) AS similarity
+             FROM episodes
+            WHERE embedding IS NOT NULL
+              AND ($2::uuid IS NULL OR channel_id = $2::uuid)
+              AND 1 - (embedding <=> $1::vector) > $3
+            ORDER BY embedding <=> $1::vector
+            LIMIT $4`,
+          [vecStr(queryEmbedding), resolvedChannelId, 0.5, 20],
+        );
       })(),
     ]);
 
     // Merge and deduplicate results
-    const resultMap = new Map();
+    type MergedResult = {
+      id: string;
+      youtube_id?: string;
+      title?: string | null;
+      description?: string | null;
+      thumbnail_url?: string | null;
+      published_at?: string | null;
+      channel_id?: string;
+      channel_slug?: string;
+      score: number;
+      source: 'keyword' | 'semantic' | 'hybrid';
+    };
+    const resultMap = new Map<string, MergedResult>();
 
     // Add keyword results
     for (const hit of keywordResults.hits) {
@@ -73,7 +102,13 @@ export async function GET(request: Request) {
         existing.source = 'hybrid';
       } else {
         resultMap.set(result.id, {
-          ...result,
+          id: result.id,
+          youtube_id: result.youtube_id,
+          title: result.title,
+          description: result.description,
+          thumbnail_url: result.thumbnail_url,
+          published_at: result.published_at,
+          channel_id: result.channel_id,
           score: result.similarity,
           source: 'semantic',
         });
@@ -93,9 +128,6 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Search error:', error);
-    return NextResponse.json(
-      { error: 'Search failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
   }
 }

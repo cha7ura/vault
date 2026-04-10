@@ -24,8 +24,9 @@ from pathlib import Path
 import numpy as np
 
 # Allow running as `python scripts/agents/extract_embeddings.py`
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import get_supabase, BATCH_INSERT_SIZE
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from scripts.agents.config import BATCH_INSERT_SIZE
+from scripts.agents.db import fetch_all, fetch_one, execute, vec_str
 
 
 # ---------------------------------------------------------------------------
@@ -107,41 +108,40 @@ def load_speaker_centroids(info: dict) -> dict[str, list[float]]:
 
 
 # ---------------------------------------------------------------------------
-# Supabase helpers
+# DB helpers
 # ---------------------------------------------------------------------------
 
-def existing_labels(sb, episode_id: str) -> set[str]:
+def existing_labels(episode_id: str) -> set[str]:
     """Return the set of speaker_labels already stored for *episode_id*."""
-    rows = (
-        sb.table("speaker_embeddings")
-        .select("speaker_label")
-        .eq("episode_id", episode_id)
-        .execute()
-    ).data
+    rows = fetch_all(
+        "SELECT speaker_label FROM speaker_embeddings WHERE episode_id=%s",
+        (episode_id,),
+    )
     return {r["speaker_label"] for r in rows}
 
 
-def store_embeddings(sb, episode_id: str, centroids: dict[str, list[float]]) -> int:
+def store_embeddings(episode_id: str, centroids: dict[str, list[float]]) -> int:
     """Insert centroid rows, skipping labels that already exist. Return count."""
-    already = existing_labels(sb, episode_id)
-    to_insert = []
-    for label, vec in centroids.items():
-        if label in already:
-            continue
-        to_insert.append({
-            "episode_id": episode_id,
-            "speaker_label": label,
-            "embedding": vec,
-        })
+    already = existing_labels(episode_id)
+    to_insert = [
+        (episode_id, label, vec_str(vec))
+        for label, vec in centroids.items()
+        if label not in already
+    ]
 
     if not to_insert:
         return 0
 
     inserted = 0
-    for i in range(0, len(to_insert), BATCH_INSERT_SIZE):
-        batch = to_insert[i : i + BATCH_INSERT_SIZE]
-        sb.table("speaker_embeddings").insert(batch).execute()
-        inserted += len(batch)
+    for row in to_insert:
+        execute(
+            """
+            INSERT INTO speaker_embeddings (episode_id, speaker_label, embedding)
+            VALUES (%s, %s, %s::vector)
+            """,
+            row,
+        )
+        inserted += 1
     return inserted
 
 
@@ -149,25 +149,20 @@ def store_embeddings(sb, episode_id: str, centroids: dict[str, list[float]]) -> 
 # Episode resolution
 # ---------------------------------------------------------------------------
 
-def resolve_episode_id(sb, youtube_id: str) -> str | None:
+def resolve_episode_id(youtube_id: str) -> str | None:
     """Look up the episode UUID for a given youtube_id."""
-    rows = (
-        sb.table("episodes")
-        .select("id")
-        .eq("youtube_id", youtube_id)
-        .limit(1)
-        .execute()
-    ).data
-    if rows:
-        return rows[0]["id"]
-    return None
+    row = fetch_one(
+        "SELECT id FROM episodes WHERE youtube_id=%s LIMIT 1",
+        (youtube_id,),
+    )
+    return row["id"] if row else None
 
 
 # ---------------------------------------------------------------------------
 # Processing
 # ---------------------------------------------------------------------------
 
-def process_episode(sb, nemo_dir: Path, episode_id: str, subdir: str | None = None) -> bool:
+def process_episode(nemo_dir: Path, episode_id: str, subdir: str | None = None) -> bool:
     """
     Extract and store embeddings for a single episode.
     Returns True on success, False on skip/error.
@@ -188,7 +183,7 @@ def process_episode(sb, nemo_dir: Path, episode_id: str, subdir: str | None = No
         print(f"  [skip] no speakers found in embeddings")
         return False
 
-    count = store_embeddings(sb, episode_id, centroids)
+    count = store_embeddings(episode_id, centroids)
     if count == 0:
         print(f"  [skip] all {len(centroids)} speakers already stored")
     else:
@@ -196,13 +191,13 @@ def process_episode(sb, nemo_dir: Path, episode_id: str, subdir: str | None = No
     return True
 
 
-def run_single(sb, nemo_dir: Path, episode_id: str):
+def run_single(nemo_dir: Path, episode_id: str):
     """Process a single episode given its ID."""
     print(f"Processing episode {episode_id} ...")
-    process_episode(sb, nemo_dir, episode_id)
+    process_episode(nemo_dir, episode_id)
 
 
-def run_batch(sb, nemo_dir: Path):
+def run_batch(nemo_dir: Path):
     """
     Scan subdirectories of *nemo_dir*, treating each folder name as a
     youtube_id, and process all matching episodes.
@@ -218,14 +213,14 @@ def run_batch(sb, nemo_dir: Path):
     errors = 0
 
     for yt_id in subdirs:
-        episode_id = resolve_episode_id(sb, yt_id)
+        episode_id = resolve_episode_id(yt_id)
         if episode_id is None:
             print(f"  [{yt_id}] no matching episode in DB — skipping")
             skipped += 1
             continue
 
         print(f"  [{yt_id}] episode {episode_id}")
-        ok = process_episode(sb, nemo_dir, episode_id, subdir=yt_id)
+        ok = process_episode(nemo_dir, episode_id, subdir=yt_id)
         if ok:
             processed += 1
         else:
@@ -256,12 +251,10 @@ def main():
         print(f"Error: {args.nemo_dir} does not exist")
         sys.exit(1)
 
-    sb = get_supabase()
-
     if args.episode_id:
-        run_single(sb, args.nemo_dir, args.episode_id)
+        run_single(args.nemo_dir, args.episode_id)
     else:
-        run_batch(sb, args.nemo_dir)
+        run_batch(args.nemo_dir)
 
 
 if __name__ == "__main__":

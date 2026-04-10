@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Supabase migrations via psycopg2.
+"""Run SQL migrations against Aiven Postgres via psycopg2.
 
 Usage:
     # Apply all unapplied migrations
@@ -13,7 +13,6 @@ Usage:
 """
 import argparse
 import os
-import re
 from pathlib import Path
 
 import psycopg2
@@ -23,7 +22,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env.local")
 
 MIGRATIONS_DIR = ROOT_DIR / "supabase" / "migrations"
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = os.environ["AIVEN_DATABASE_URL"]
 
 
 def get_migration_files() -> list[Path]:

@@ -1,4 +1,4 @@
-import { createServerClient } from '@/lib/supabase';
+import { fetchOne } from '@/lib/db';
 import { searchEpisodes, searchInsights } from '@/lib/meilisearch';
 import { EpisodeCard } from '@/components/episode-card';
 import { InsightCard } from '@/components/insight-card';
@@ -9,21 +9,20 @@ interface SearchPageProps {
   searchParams: Promise<{ q?: string }>;
 }
 
+type ChannelLite = { id: string; name: string };
+
 async function getChannelId(slug: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('channels')
-    .select('id, name')
-    .eq('slug', slug)
-    .single();
-  return data;
+  return fetchOne<ChannelLite>(
+    'SELECT id, name FROM channels WHERE slug = $1',
+    [slug],
+  );
 }
 
 export default async function SearchPage({ params, searchParams }: SearchPageProps) {
   const { channel: channelSlug } = await params;
   const { q: query = '' } = await searchParams;
   const channel = await getChannelId(channelSlug);
-  
+
   if (!channel) return null;
 
   let episodeResults: any[] = [];
@@ -59,8 +58,8 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {episodeResults.map((episode) => (
-                    <EpisodeCard 
-                      key={episode.id} 
+                    <EpisodeCard
+                      key={episode.id}
                       episode={episode}
                       channelSlug={channelSlug}
                     />
@@ -77,8 +76,8 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {insightResults.map((insight) => (
-                    <InsightCard 
-                      key={insight.id} 
+                    <InsightCard
+                      key={insight.id}
                       insight={insight}
                       channelSlug={channelSlug}
                     />
@@ -91,7 +90,7 @@ export default async function SearchPage({ params, searchParams }: SearchPagePro
             {episodeResults.length === 0 && insightResults.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">
-                  No results found for "{query}"
+                  No results found for &ldquo;{query}&rdquo;
                 </p>
               </div>
             )}

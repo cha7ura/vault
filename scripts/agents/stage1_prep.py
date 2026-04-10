@@ -4,11 +4,8 @@ from __future__ import annotations
 import re
 from typing import TypedDict
 
-from scripts.agents.config import (
-    get_supabase,
-    HOST_ANCHOR_PHRASES,
-    DOAC_HOST_NAME,
-)
+from scripts.agents.config import HOST_ANCHOR_PHRASES, DOAC_HOST_NAME
+from scripts.agents.db import fetch_all, fetch_one, execute, execute_returning
 
 
 class SpeakerInfo(TypedDict):
@@ -135,20 +132,23 @@ def slugify(name: str) -> str:
     return re.sub(r"-+", "-", slug).strip("-")
 
 
-def get_or_create_person(sb, name: str, photo_url: str | None = None) -> dict:
+def get_or_create_person(name: str, photo_url: str | None = None) -> dict:
     """Find a person by name slug, or create one. Returns the person row."""
     slug = slugify(name)
 
-    rows = sb.table("people").select("*").eq("slug", slug).limit(1).execute().data
-    if rows:
-        return rows[0]
+    existing = fetch_one("SELECT * FROM people WHERE slug=%s LIMIT 1", (slug,))
+    if existing:
+        return existing
 
-    insert_data = {"name": name, "slug": slug}
     if photo_url:
-        insert_data["photo_url"] = photo_url
-
-    result = sb.table("people").insert(insert_data).execute()
-    return result.data[0]
+        return execute_returning(
+            "INSERT INTO people (name, slug, photo_url) VALUES (%s, %s, %s) RETURNING *",
+            (name, slug, photo_url),
+        )
+    return execute_returning(
+        "INSERT INTO people (name, slug) VALUES (%s, %s) RETURNING *",
+        (name, slug),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -184,20 +184,20 @@ def identify_host_speaker(segments: list[dict], max_scan: int = 30) -> str:
 
 def prep_episode(episode_id: str) -> PrepResult:
     """Run Stage 1 for a single episode. Returns PrepResult."""
-    sb = get_supabase()
+    episode = fetch_one("SELECT * FROM episodes WHERE id=%s", (episode_id,))
+    if not episode:
+        raise ValueError(f"Episode not found: {episode_id}")
 
-    # Fetch episode metadata
-    episode = sb.table("episodes").select("*").eq("id", episode_id).single().execute().data
-
-    # Fetch first 60 segments ordered by position
-    segments = (
-        sb.table("segments")
-        .select("position, speaker, text, start_time, end_time")
-        .eq("episode_id", episode_id)
-        .order("position")
-        .limit(60)
-        .execute()
-    ).data
+    segments = fetch_all(
+        """
+        SELECT position, speaker, text, start_time, end_time
+        FROM segments
+        WHERE episode_id=%s
+        ORDER BY position
+        LIMIT 60
+        """,
+        (episode_id,),
+    )
 
     if not segments:
         return PrepResult(
@@ -211,75 +211,89 @@ def prep_episode(episode_id: str) -> PrepResult:
 
     # Save chapters to episode
     if chapters:
-        sb.table("episodes").update(
-            {"chapters": chapters}
-        ).eq("id", episode_id).execute()
+        execute(
+            "UPDATE episodes SET chapters=%s WHERE id=%s",
+            (chapters, episode_id),
+        )
 
     intro_end = detect_intro_end(segments, chapters=chapters)
 
-    # 1b. Identify guest
-    guest_name = None
+    # 1b. Identify guest — use Stage 0 audit data first
+    guest_names = episode.get("guest_names") or []
+    episode_type = episode.get("episode_type")
+    guest_name = guest_names[0] if guest_names else None
 
-    # Try episode_guests table first
-    guest_rows = (
-        sb.table("episode_guests")
-        .select("guest_id, guests(name, photo_url)")
-        .eq("episode_id", episode_id)
-        .execute()
-    ).data
-    if guest_rows:
-        guest_name = guest_rows[0]["guests"]["name"]
+    # Fallback chain if Stage 0 audit didn't populate
+    if not guest_name and episode_type != "solo":
+        # Try episode_guests table
+        guest_rows = fetch_all(
+            """
+            SELECT g.name AS name, g.photo_url AS photo_url
+            FROM episode_guests eg
+            JOIN guests g ON g.id = eg.guest_id
+            WHERE eg.episode_id=%s
+            """,
+            (episode_id,),
+        )
+        if guest_rows:
+            guest_name = guest_rows[0]["name"]
 
-    # Fallback to description parsing
-    if not guest_name:
-        guest_name = parse_guest_from_description(episode.get("description"))
+        # Fallback to description parsing
+        if not guest_name:
+            guest_name = parse_guest_from_description(episode.get("description"))
 
-    # Fallback to LLM extraction from description
-    if not guest_name and episode.get("description"):
-        from scripts.agents.llm import llm_call
-        from scripts.agents.prompts import GUEST_EXTRACTION_PROMPT
-        response = llm_call(GUEST_EXTRACTION_PROMPT.format(description=episode["description"][:500]))
-        if response and response != "UNKNOWN" and 2 <= len(response.split()) <= 5:
-            guest_name = response.strip().strip('"')
-
-    # Fallback to title parsing (DOAC titles often have "Name: Topic")
-    if not guest_name and episode.get("title"):
-        title = episode["title"]
-        # Pattern: "Name: rest of title" or "Name | rest"
-        import re
-        match = re.match(r"^([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*[:|]", title)
-        if match:
-            guest_name = match.group(1)
-
-    # 1c. Map speakers
+    # 1c. Map speakers — filter out phantom speakers (< 5 segments)
     host_label = identify_host_speaker(segments)
-    all_speakers = sorted(set(seg["speaker"] for seg in segments))
-    guest_labels = [s for s in all_speakers if s != host_label]
+    speaker_counts: dict[str, int] = {}
+    for seg in segments:
+        speaker_counts[seg["speaker"]] = speaker_counts.get(seg["speaker"], 0) + 1
+    # Only consider speakers with at least 5 segments as real
+    real_speakers = sorted(s for s, c in speaker_counts.items() if c >= 5)
+    if host_label not in real_speakers:
+        real_speakers.append(host_label)
+    guest_labels = [s for s in real_speakers if s != host_label]
 
     # Create/find people
-    host_person = get_or_create_person(sb, DOAC_HOST_NAME)
+    host_person = get_or_create_person(DOAC_HOST_NAME)
     speakers: dict[str, SpeakerInfo] = {
         host_label: SpeakerInfo(
             person_id=host_person["id"], name=DOAC_HOST_NAME, role="host"
         ),
     }
 
-    if guest_labels and guest_name:
-        guest_person = get_or_create_person(sb, guest_name)
+    # Map phantom speakers (below threshold) to host
+    for label, count in speaker_counts.items():
+        if label != host_label and count < 5:
+            speakers[label] = SpeakerInfo(
+                person_id=host_person["id"], name=DOAC_HOST_NAME, role="host"
+            )
+
+    if guest_labels and guest_names and len(guest_names) > 0:
+        # Multi-guest: assign names round-robin if more guests than names
+        for idx, label in enumerate(guest_labels):
+            name = guest_names[idx] if idx < len(guest_names) else guest_names[0]
+            guest_person = get_or_create_person(name)
+            speakers[label] = SpeakerInfo(
+                person_id=guest_person["id"], name=name, role="guest"
+            )
+    elif guest_labels and guest_name:
+        guest_person = get_or_create_person(guest_name)
         for label in guest_labels:
             speakers[label] = SpeakerInfo(
                 person_id=guest_person["id"], name=guest_name, role="guest"
             )
     elif guest_labels:
+        # No guest name found — map to host (likely solo episode with diarizer splits)
         for label in guest_labels:
             speakers[label] = SpeakerInfo(
-                person_id=None, name="Unknown Guest", role="guest"
+                person_id=host_person["id"], name=DOAC_HOST_NAME, role="host"
             )
 
-    # Save intro_end_position to episode
-    sb.table("episodes").update(
-        {"intro_end_position": intro_end}
-    ).eq("id", episode_id).execute()
+    # Save intro_end_position and speaker_map to episode
+    execute(
+        "UPDATE episodes SET intro_end_position=%s, speaker_map=%s WHERE id=%s",
+        (intro_end, {k: dict(v) for k, v in speakers.items()}, episode_id),
+    )
 
     return PrepResult(
         episode_id=episode_id,

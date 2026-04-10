@@ -1,25 +1,29 @@
-import { createServerClient } from '@/lib/supabase';
+import { fetchAll } from '@/lib/db';
 import { EpisodesList } from '@/components/episodes-list';
 
+type EpisodeRow = {
+  id: string;
+  youtube_id: string;
+  title: string | null;
+  description: string | null;
+  thumbnail_url: string | null;
+  published_at: string | null;
+  duration_seconds: number | null;
+};
+
 async function getEpisodes(channelSlug: string) {
-  const supabase = createServerClient();
-
-  const { data: channel } = await supabase
-    .from('channels')
-    .select('id')
-    .eq('slug', channelSlug)
-    .single();
-
-  if (!channel) return [];
-
-  const { data } = await supabase
-    .from('episodes')
-    .select('id, youtube_id, title, description, thumbnail_url, published_at, duration_seconds')
-    .eq('channel_id', channel.id)
-    .not('processed_at', 'is', null)
-    .order('published_at', { ascending: false });
-
-  return data || [];
+  // Single JOIN through channels avoids the old two-step lookup
+  // (fetch channel, then filter episodes by channel_id).
+  return fetchAll<EpisodeRow>(
+    `SELECT e.id, e.youtube_id, e.title, e.description,
+            e.thumbnail_url, e.published_at, e.duration_seconds
+       FROM episodes e
+       JOIN channels c ON c.id = e.channel_id
+      WHERE c.slug = $1
+        AND e.processed_at IS NOT NULL
+      ORDER BY e.published_at DESC NULLS LAST`,
+    [channelSlug],
+  );
 }
 
 export default async function EpisodesPage({
@@ -36,7 +40,8 @@ export default async function EpisodesPage({
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Episodes</h1>
         </div>
-        <EpisodesList episodes={episodes} channelSlug={channel} />
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        <EpisodesList episodes={episodes as any} channelSlug={channel} />
       </div>
     </div>
   );

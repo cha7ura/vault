@@ -5,7 +5,8 @@ import argparse
 import asyncio
 import time
 
-from scripts.agents.config import get_supabase, DOAC_CHANNEL_SLUG, WIKI_DIR
+from scripts.agents.config import DOAC_CHANNEL_SLUG, WIKI_DIR
+from scripts.agents.db import fetch_all, fetch_one
 from scripts.agents.stage1_prep import prep_episode
 from scripts.agents.stage2_clean import clean_episode
 from scripts.agents.stage3_extract import extract_episode
@@ -14,23 +15,19 @@ from scripts.agents.stage3_enrich import run_enrichment
 
 def get_episodes(channel_slug: str) -> list[dict]:
     """Fetch episodes ordered oldest → newest (chronological wiki accumulation)."""
-    sb = get_supabase()
-    channel = (
-        sb.table("channels")
-        .select("id")
-        .eq("slug", channel_slug)
-        .single()
-        .execute()
-    ).data
-    episodes = (
-        sb.table("episodes")
-        .select("id, youtube_id, title, published_at, duration_seconds, "
-                "intro_end_position, knowledge_processed_at, wiki_processed_at, speaker_map")
-        .eq("channel_id", channel["id"])
-        .order("published_at")   # oldest first for wiki accumulation
-        .execute()
-    ).data
-    return episodes
+    channel = fetch_one("SELECT id FROM channels WHERE slug=%s", (channel_slug,))
+    if not channel:
+        raise ValueError(f"Channel not found: {channel_slug}")
+    return fetch_all(
+        """
+        SELECT id, youtube_id, title, published_at, duration_seconds,
+               intro_end_position, knowledge_processed_at, wiki_processed_at, speaker_map
+        FROM episodes
+        WHERE channel_id=%s
+        ORDER BY published_at NULLS LAST
+        """,
+        (channel["id"],),
+    )
 
 
 def seed_wiki() -> None:

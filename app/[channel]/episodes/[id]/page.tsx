@@ -1,27 +1,44 @@
 import { notFound } from 'next/navigation';
-import { createServerClient } from '@/lib/supabase';
+import { fetchOne, fetchAll } from '@/lib/db';
 import { EpisodeTranscriptTabs } from '@/components/episode-transcript-tabs';
 import { format } from 'date-fns';
 import { Clock, Calendar, ExternalLink, FileText, Lightbulb, BookOpen } from 'lucide-react';
 
+type Episode = {
+  id: string;
+  youtube_id: string;
+  title: string | null;
+  description: string | null;
+  published_at: string | null;
+  duration_seconds: number | null;
+  [key: string]: unknown;
+};
+
+type SegmentRow = {
+  id: string;
+  start_time: number;
+  end_time: number;
+  text: string | null;
+  speaker: string | null;
+  words: unknown;
+  diarizer: string | null;
+};
+
 async function getEpisode(youtubeId: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('episodes')
-    .select('*')
-    .eq('youtube_id', youtubeId)
-    .single();
-  return data;
+  return fetchOne<Episode>(
+    'SELECT * FROM episodes WHERE youtube_id = $1',
+    [youtubeId],
+  );
 }
 
 async function getSegments(episodeId: string) {
-  const supabase = createServerClient();
-  const { data } = await supabase
-    .from('segments')
-    .select('id, start_time, end_time, text, speaker, words, diarizer')
-    .eq('episode_id', episodeId)
-    .order('start_time');
-  return data || [];
+  return fetchAll<SegmentRow>(
+    `SELECT id, start_time, end_time, text, speaker, words, diarizer
+       FROM segments
+      WHERE episode_id = $1
+      ORDER BY start_time`,
+    [episodeId],
+  );
 }
 
 function formatDuration(seconds: number): string {
@@ -48,7 +65,7 @@ export default async function EpisodePage({
 }: {
   params: Promise<{ channel: string; id: string }>;
 }) {
-  const { channel, id } = await params;
+  const { id } = await params;
   const episode = await getEpisode(id);
 
   if (!episode) {
@@ -100,7 +117,7 @@ export default async function EpisodePage({
           <div className="aspect-video bg-muted rounded-lg overflow-hidden lg:sticky lg:top-4 lg:z-10">
             <iframe
               src={`https://www.youtube.com/embed/${episode.youtube_id}?enablejsapi=1&origin=${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}`}
-              title={episode.title}
+              title={episode.title ?? 'Episode'}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               className="w-full h-full"
@@ -113,7 +130,8 @@ export default async function EpisodePage({
           <div className="lg:col-span-2">
             {segments.length > 0 && (
               <EpisodeTranscriptTabs
-                segments={segments}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                segments={segments as any}
                 youtubeId={episode.youtube_id}
               />
             )}

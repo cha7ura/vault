@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts.agents.config import (
-    get_supabase,
     FILLER_PHRASES,
     FILLER_MAX_WORDS,
     CHUNK_DURATION,
     CHUNK_OVERLAP,
     WIKI_DIR,
 )
+from scripts.agents.db import fetch_all, fetch_one, execute
 from scripts.agents.wiki_extract import extract_chunk_json, write_episode_summary
 from scripts.agents.wiki_writer import merge_to_wiki, read_index, load_page
 
@@ -164,38 +164,31 @@ def parse_show_notes(description: str | None) -> dict:
 
 async def extract_episode(episode_id: str, speaker_map: dict[str, dict]) -> dict:
     """Run Stage 3 wiki extraction for a single episode."""
-    sb = get_supabase()
     wiki_dir = WIKI_DIR
 
     # Fetch episode
-    episode = sb.table("episodes").select("*").eq("id", episode_id).single().execute().data
+    episode = fetch_one("SELECT * FROM episodes WHERE id=%s", (episode_id,))
+    if not episode:
+        raise ValueError(f"Episode not found: {episode_id}")
     youtube_id = episode["youtube_id"]
     title = episode.get("title", "")
     description = episode.get("description", "")
     published_at = episode.get("published_at")
-    intro_end = episode.get("intro_end_position", 0)
+    intro_end = episode.get("intro_end_position") or 0
 
-    # Fetch all segments (paginated)
-    all_segments = []
-    offset = 0
-    while True:
-        batch = (
-            sb.table("segments")
-            .select("id, position, speaker, text, clean_text, start_time, end_time")
-            .eq("episode_id", episode_id)
-            .order("position")
-            .range(offset, offset + 999)
-            .execute()
-        ).data
-        if not batch:
-            break
-        all_segments.extend(batch)
-        if len(batch) < 1000:
-            break
-        offset += 1000
+    # Fetch all segments
+    all_segments = fetch_all(
+        """
+        SELECT id, position, speaker, text, clean_text, start_time, end_time
+        FROM segments
+        WHERE episode_id=%s
+        ORDER BY position
+        """,
+        (episode_id,),
+    )
 
     # Filter to content (after intro)
-    content_segments = [s for s in all_segments if s["position"] >= intro_end]
+    content_segments = [s for s in all_segments if (s["position"] or 0) >= intro_end]
 
     # 3a. Triage
     substantive = triage_segments(content_segments)
@@ -239,9 +232,10 @@ async def extract_episode(episode_id: str, speaker_map: dict[str, dict]) -> dict
     show_notes = parse_show_notes(description)
 
     # 3g. Checkpoint
-    sb.table("episodes").update({
-        "wiki_processed_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", episode_id).execute()
+    execute(
+        "UPDATE episodes SET wiki_processed_at=%s WHERE id=%s",
+        (datetime.now(timezone.utc).isoformat(), episode_id),
+    )
 
     return {
         "substantive_turns": len(substantive),

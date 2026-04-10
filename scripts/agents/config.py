@@ -2,13 +2,11 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from supabase import create_client, Client
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(ROOT_DIR / ".env.local")
 
-SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+DATABASE_URL = os.environ["AIVEN_DATABASE_URL"]
 
 # LLM config — Groq (preferred) > OpenRouter > Ollama (fallback)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
@@ -77,6 +75,5 @@ FILLER_PHRASES = {
     "mm-hmm", "mhm", "uh-huh", "hmm", "um", "uh", "ah",
 }
 
-
-def get_supabase() -> Client:
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+# Voice fingerprint threshold (used by scripts/agents/map_speakers.py)
+HOST_SIMILARITY_THRESHOLD = float(os.environ.get("HOST_SIMILARITY_THRESHOLD", "0.70"))
