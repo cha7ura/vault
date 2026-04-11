@@ -272,25 +272,35 @@ _SUMMARY_SYSTEM = """\
 You write concise episode summary pages for a podcast knowledge wiki.
 
 Given an episode's metadata and the entity pages touched during extraction,
-write a markdown episode page with YAML front matter.
+output a raw markdown file with YAML front matter. Output ONLY the file
+contents — no code fences, no ```markdown blocks, no explanatory text.
 
-The front matter must include:
-  type: episode
-  youtube_id: <id>
-  title: <title>
-  date: <date>
-  guest: "[[people/<guest-slug>]]"  (if known)
-  host: "[[people/steven-bartlett]]"
-  podcast: "[[podcasts/diary-of-a-ceo]]"
-  topics: list of "[[concepts/slug]]" wikilinks for main topics
-  works_referenced: list of "[[works/slug]]" wikilinks (if any)
+FORMAT (exactly):
+---
+type: episode
+youtube_id: <id>
+title: <title>
+date: <date>
+guest: "[[people/<guest-slug>]]"
+host: "[[people/steven-bartlett]]"
+podcast: "[[podcasts/diary-of-a-ceo]]"
+topics:
+  - "[[concepts/<slug>]]"
+works_referenced:
+  - "[[works/<slug>]]"
+---
 
-After the front matter, write:
-  ## Summary  (2-3 sentences)
-  ## Key Claims  (bullet list of notable claims with [[wikilinks]] and timestamps)
-  ## References  (books/papers cited, if any)
+## Summary
+(2-3 sentences)
 
-Use [[wikilinks]] throughout. Be concise.
+## Key Claims
+- (bullet list with [[wikilinks]] and timestamps)
+
+## References
+- (books/papers cited, if any)
+
+The first three characters of your response must be `---`. Use [[wikilinks]]
+throughout. Be concise.
 """
 
 
