@@ -354,11 +354,21 @@ def extract_chunk_json(
             error_payload = resp.json()
         except Exception:
             error_payload = None
+        # Extract the short error message so the llm_usage row tells us
+        # *why* it failed, not just that it did. Always log it — even on
+        # successful recovery, so we can track how often we're salvaging.
+        err_msg = None
+        if error_payload:
+            err_msg = (error_payload.get("error") or {}).get("message")
+        if not err_msg:
+            err_msg = resp.text[:500]
+        if result is not None:
+            err_msg = f"recovered: {err_msg}"
         _log_call(
             episode_id=episode_id, stage="wiki_extract", provider="groq",
             model=WIKI_EXTRACT_MODEL, status_code=resp.status_code,
             payload=error_payload, duration_ms=duration_ms,
-            error=(None if result is not None else resp.text[:500]),
+            error=err_msg[:500] if err_msg else None,
         )
         if result is None:
             print(f"  WARN: Groq returned {resp.status_code}: {resp.text[:2000]}")
