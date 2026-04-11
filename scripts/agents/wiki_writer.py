@@ -41,6 +41,21 @@ def slugify(name: str) -> str:
     return s.strip("-")
 
 
+def sanitize_slug(slug: str) -> str:
+    """Normalize an LLM-provided slug.
+
+    The extractor sometimes emits slugs with a directory prefix
+    (``"people/elon-musk"``) or stray whitespace/case. Keep only the
+    basename and re-slugify so a merge always writes to
+    ``wiki/people/elon-musk.md`` and never ``wiki/people/people/...``.
+    """
+    if not slug:
+        return ""
+    if "/" in slug:
+        slug = slug.rsplit("/", 1)[-1]
+    return slugify(slug)
+
+
 def load_page(path: Path) -> dict:
     """Load YAML front matter from a .md file. Returns empty dict if missing or unparseable."""
     if not path.exists():
@@ -109,10 +124,15 @@ def _edge_key_for(entity: dict, edge: dict) -> tuple[str, str]:
 
 
 def _edge_is_duplicate(existing_edges: list[dict], new_edge_attrs: dict) -> bool:
-    """Check if an edge with same entity + episode already exists."""
+    """Check if an edge with same (entity, episode, timestamp) already exists.
+
+    Timestamp is part of the key so that two claims at different points in the
+    same episode are preserved — only byte-for-byte re-runs collapse.
+    """
     for ex in existing_edges:
         if (ex.get("entity") == new_edge_attrs.get("entity")
-                and ex.get("episode") == new_edge_attrs.get("episode")):
+                and ex.get("episode") == new_edge_attrs.get("episode")
+                and ex.get("timestamp") == new_edge_attrs.get("timestamp")):
             return True
     return False
 
@@ -133,7 +153,7 @@ def _merge_entity_page(
     """Upsert a single entity page. Returns the page path."""
     entity_type = entity["type"]
     name = entity["name"]
-    slug = entity.get("slug") or slugify(name)
+    slug = sanitize_slug(entity.get("slug") or "") or slugify(name)
     attributes = entity.get("attributes") or {}
 
     page_path = _entity_page_path(entity_type, slug, wiki_dir)

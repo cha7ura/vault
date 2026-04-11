@@ -4,6 +4,7 @@ import yaml
 import pytest
 from scripts.agents.wiki_writer import (
     slugify,
+    sanitize_slug,
     load_page,
     save_page,
     read_index,
@@ -26,6 +27,27 @@ def test_slugify():
     assert slugify("Andrew Huberman") == "andrew-huberman"
     assert slugify("Dr. Huberman, PhD") == "dr-huberman-phd"
     assert slugify("AG1") == "ag1"
+
+
+def test_sanitize_slug_strips_dir_prefix():
+    assert sanitize_slug("people/elon-musk") == "elon-musk"
+    assert sanitize_slug("concepts/mental-health") == "mental-health"
+    assert sanitize_slug("Elon Musk") == "elon-musk"
+    assert sanitize_slug("") == ""
+
+
+def test_merge_to_wiki_sanitizes_slug_with_dir_prefix(tmp_path):
+    """LLM sometimes emits slug like 'people/elon-musk' — must write
+    to wiki/people/elon-musk.md, not wiki/people/people/elon-musk.md."""
+    wiki = _make_wiki(tmp_path)
+    extraction = {
+        "entities": [{"type": "Person", "name": "Elon Musk",
+                      "slug": "people/elon-musk", "attributes": {}}],
+        "edges": [], "observations": [],
+    }
+    merge_to_wiki(extraction, "ep1", wiki)
+    assert (wiki / "people" / "elon-musk.md").exists()
+    assert not (wiki / "people" / "people").exists()
 
 
 def test_load_page_returns_empty_dict_for_missing_file(tmp_path):
@@ -130,6 +152,39 @@ def test_merge_to_wiki_deduplicates_edges(tmp_path):
     merge_to_wiki(extraction, "abc123", wiki)
     fm = load_page(wiki / "people" / "andrew-huberman.md")
     assert len(fm["relationships"]["claims"]) == 1
+
+
+def test_merge_to_wiki_keeps_edges_at_different_timestamps(tmp_path):
+    """Two claims about the same concept at different points in one episode
+    must both be preserved — timestamp is part of the dedup key."""
+    wiki = _make_wiki(tmp_path)
+    extraction = {
+        "entities": [
+            {"type": "Person", "name": "Andrew Huberman", "slug": "andrew-huberman", "attributes": {}},
+            {"type": "Concept", "name": "Dopamine", "slug": "dopamine", "attributes": {}},
+        ],
+        "edges": [
+            {
+                "type": "Claims", "from_name": "Andrew Huberman", "from_type": "Person",
+                "to_name": "Dopamine", "to_type": "Concept",
+                "attributes": {"timestamp": "14:23", "insight_type": "claim"},
+                "episode": "abc123",
+            },
+            {
+                "type": "Claims", "from_name": "Andrew Huberman", "from_type": "Person",
+                "to_name": "Dopamine", "to_type": "Concept",
+                "attributes": {"timestamp": "31:07", "insight_type": "claim"},
+                "episode": "abc123",
+            },
+        ],
+        "observations": [],
+    }
+    merge_to_wiki(extraction, "abc123", wiki)
+    fm = load_page(wiki / "people" / "andrew-huberman.md")
+    claims = fm["relationships"]["claims"]
+    assert len(claims) == 2
+    timestamps = {c["timestamp"] for c in claims}
+    assert timestamps == {"14:23", "31:07"}
 
 
 def test_merge_to_wiki_adds_observation(tmp_path):
