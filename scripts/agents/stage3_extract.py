@@ -114,7 +114,7 @@ def extract_and_write_episode(
         index_content = (wiki_dir / "_index.md").read_text(encoding="utf-8")
 
         # Extract entities + edges from this chunk
-        extraction = extract_chunk_json(chunk_text, index_content)
+        extraction = extract_chunk_json(chunk_text, index_content, episode_id=episode_id)
 
         # Force-stamp youtube_id on every edge/observation. We override rather
         # than setdefault because the LLM sometimes copies the literal
@@ -231,8 +231,9 @@ async def extract_episode(episode_id: str, speaker_map: dict[str, dict]) -> dict
                 break
 
         write_episode_summary(
-            episode={"youtube_id": youtube_id, "title": title,
-                     "published_at": published_at, "guest_name": guest_name},
+            episode={"episode_id": episode_id, "youtube_id": youtube_id,
+                     "title": title, "published_at": published_at,
+                     "guest_name": guest_name},
             touched_page_texts=touched_texts,
             wiki_dir=wiki_dir,
         )

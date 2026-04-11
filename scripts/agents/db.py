@@ -190,6 +190,57 @@ def execute_many(query: str, rows: Iterable[Sequence[Any]], page_size: int = 500
 
 
 # ---------------------------------------------------------------------------
+# LLM usage logging
+# ---------------------------------------------------------------------------
+
+def log_llm_usage(
+    *,
+    episode_id: str | None,
+    stage: str,
+    provider: str,
+    model: str,
+    status_code: int,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    reasoning_tokens: int = 0,
+    cached_input_tokens: int = 0,
+    total_tokens: int = 0,
+    cost_usd: float = 0.0,
+    request_id: str | None = None,
+    finish_reason: str | None = None,
+    duration_ms: int | None = None,
+    error: str | None = None,
+    raw_usage: dict | None = None,
+) -> None:
+    """Append one LLM call to the llm_usage table. Never raises — cost
+    tracking failures must not kill the pipeline."""
+    try:
+        execute(
+            """
+            INSERT INTO llm_usage (
+                episode_id, stage, provider, model, request_id,
+                prompt_tokens, completion_tokens, reasoning_tokens,
+                cached_input_tokens, total_tokens, cost_usd,
+                status_code, finish_reason, duration_ms, error, raw_usage
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s, %s
+            )
+            """,
+            (
+                episode_id, stage, provider, model, request_id,
+                prompt_tokens, completion_tokens, reasoning_tokens,
+                cached_input_tokens, total_tokens, cost_usd,
+                status_code, finish_reason, duration_ms, error, raw_usage,
+            ),
+        )
+    except Exception as e:
+        print(f"  WARN: failed to log llm_usage: {e}")
+
+
+# ---------------------------------------------------------------------------
 # pgvector helpers
 # ---------------------------------------------------------------------------
 

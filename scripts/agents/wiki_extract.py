@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import requests
@@ -11,10 +12,71 @@ from scripts.agents.config import (
     OPENROUTER_API_KEY,
     WIKI_EXTRACT_MODEL,
     WIKI_SUMMARY_MODEL,
+    groq_cost_usd,
 )
+from scripts.agents.db import log_llm_usage
 
 _GROQ_BASE = "https://api.groq.com/openai/v1"
 _OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+
+
+def _log_call(
+    *,
+    episode_id: str | None,
+    stage: str,
+    provider: str,
+    model: str,
+    status_code: int,
+    payload: dict | None,
+    duration_ms: int,
+    error: str | None = None,
+) -> None:
+    """Extract usage from an API response and persist it to llm_usage.
+
+    Works for both providers:
+      - OpenRouter returns authoritative ``usage.cost`` when the request
+        includes ``usage: {include: true}``.
+      - Groq does not return cost, so we compute from tokens × price list.
+    """
+    usage = (payload or {}).get("usage") or {}
+    prompt_tokens = int(usage.get("prompt_tokens") or 0)
+    completion_tokens = int(usage.get("completion_tokens") or 0)
+    total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
+    reasoning_tokens = int(
+        ((usage.get("completion_tokens_details") or {}).get("reasoning_tokens")) or 0
+    )
+    cached_input_tokens = int(
+        ((usage.get("prompt_tokens_details") or {}).get("cached_tokens")) or 0
+    )
+    if provider == "openrouter":
+        cost_usd = float(usage.get("cost") or 0.0)
+    else:
+        cost_usd = groq_cost_usd(model, prompt_tokens, completion_tokens)
+
+    finish_reason = None
+    request_id = (payload or {}).get("id")
+    choices = (payload or {}).get("choices") or []
+    if choices:
+        finish_reason = choices[0].get("finish_reason")
+
+    log_llm_usage(
+        episode_id=episode_id,
+        stage=stage,
+        provider=provider,
+        model=model,
+        status_code=status_code,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        reasoning_tokens=reasoning_tokens,
+        cached_input_tokens=cached_input_tokens,
+        total_tokens=total_tokens,
+        cost_usd=cost_usd,
+        request_id=request_id,
+        finish_reason=finish_reason,
+        duration_ms=duration_ms,
+        error=error,
+        raw_usage=usage or None,
+    )
 
 _EMPTY = {"entities": [], "edges": [], "observations": []}
 
@@ -232,7 +294,11 @@ Use [[wikilinks]] throughout. Be concise.
 """
 
 
-def extract_chunk_json(chunk_text: str, index_content: str) -> dict:
+def extract_chunk_json(
+    chunk_text: str,
+    index_content: str,
+    episode_id: str | None = None,
+) -> dict:
     """Call Groq to extract entities/edges from a transcript chunk.
 
     Returns extraction dict with keys: entities, edges, observations.
@@ -243,6 +309,7 @@ def extract_chunk_json(chunk_text: str, index_content: str) -> dict:
         return dict(_EMPTY)
 
     user_content = f"INDEX:\n{index_content}\n\nTRANSCRIPT:\n{chunk_text}"
+    t0 = time.monotonic()
     try:
         resp = requests.post(
             f"{_GROQ_BASE}/chat/completions",
@@ -267,20 +334,44 @@ def extract_chunk_json(chunk_text: str, index_content: str) -> dict:
             timeout=60,
         )
     except requests.RequestException as e:
+        duration_ms = int((time.monotonic() - t0) * 1000)
         print(f"  WARN: Groq request failed: {e}")
+        log_llm_usage(
+            episode_id=episode_id, stage="wiki_extract", provider="groq",
+            model=WIKI_EXTRACT_MODEL, status_code=0,
+            duration_ms=duration_ms, error=str(e),
+        )
         return dict(_EMPTY)
+
+    duration_ms = int((time.monotonic() - t0) * 1000)
 
     if resp.status_code != 200:
         # Groq strict mode returns 400 + `failed_generation` when the LLM
         # omits a required key (commonly an empty `observations: []`). The
         # partial JSON is still usable — parse it and backfill the gaps.
         result = _recover_from_failed_generation(resp)
+        try:
+            error_payload = resp.json()
+        except Exception:
+            error_payload = None
+        _log_call(
+            episode_id=episode_id, stage="wiki_extract", provider="groq",
+            model=WIKI_EXTRACT_MODEL, status_code=resp.status_code,
+            payload=error_payload, duration_ms=duration_ms,
+            error=(None if result is not None else resp.text[:500]),
+        )
         if result is None:
             print(f"  WARN: Groq returned {resp.status_code}: {resp.text[:2000]}")
             return dict(_EMPTY)
     else:
         try:
-            raw = resp.json()["choices"][0]["message"]["content"]
+            payload = resp.json()
+            _log_call(
+                episode_id=episode_id, stage="wiki_extract", provider="groq",
+                model=WIKI_EXTRACT_MODEL, status_code=200,
+                payload=payload, duration_ms=duration_ms,
+            )
+            raw = payload["choices"][0]["message"]["content"]
             result = json.loads(raw)
         except (KeyError, json.JSONDecodeError) as e:
             print(f"  WARN: Could not parse Groq response: {e}")
@@ -321,13 +412,14 @@ def write_episode_summary(
 ) -> None:
     """Generate and save an episode summary page via OpenRouter.
 
-    episode: dict with keys youtube_id, title, published_at, guest_name (optional)
+    episode: dict with keys episode_id, youtube_id, title, published_at, guest_name (optional)
     touched_page_texts: list of raw .md file contents for pages touched this episode
     """
     if not OPENROUTER_API_KEY:
         print("  WARN: OPENROUTER_API_KEY not set — skipping episode summary")
         return
 
+    episode_id = episode.get("episode_id")
     youtube_id = episode.get("youtube_id", "unknown")
     title = episode.get("title", "")
     published_at = episode.get("published_at", "")
@@ -342,6 +434,7 @@ def write_episode_summary(
         f"ENTITY PAGES TOUCHED THIS EPISODE:\n{context_pages}"
     )
 
+    t0 = time.monotonic()
     try:
         resp = requests.post(
             f"{_OPENROUTER_BASE}/chat/completions",
@@ -354,19 +447,40 @@ def write_episode_summary(
                     {"role": "user", "content": user_content},
                 ],
                 "temperature": 0.3,
+                # Return authoritative usage.cost on the response.
+                "usage": {"include": True},
             },
             timeout=120,
         )
     except requests.RequestException as e:
+        duration_ms = int((time.monotonic() - t0) * 1000)
         print(f"  WARN: OpenRouter request failed: {e}")
+        log_llm_usage(
+            episode_id=episode_id, stage="wiki_summary", provider="openrouter",
+            model=WIKI_SUMMARY_MODEL, status_code=0,
+            duration_ms=duration_ms, error=str(e),
+        )
         return
 
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
     if resp.status_code != 200:
-        print(f"  WARN: OpenRouter returned {resp.status_code}: {resp.text[:200]}")
+        print(f"  WARN: OpenRouter returned {resp.status_code}: {resp.text[:500]}")
+        log_llm_usage(
+            episode_id=episode_id, stage="wiki_summary", provider="openrouter",
+            model=WIKI_SUMMARY_MODEL, status_code=resp.status_code,
+            duration_ms=duration_ms, error=resp.text[:500],
+        )
         return
 
     try:
-        content = resp.json()["choices"][0]["message"]["content"]
+        payload = resp.json()
+        _log_call(
+            episode_id=episode_id, stage="wiki_summary", provider="openrouter",
+            model=WIKI_SUMMARY_MODEL, status_code=200,
+            payload=payload, duration_ms=duration_ms,
+        )
+        content = payload["choices"][0]["message"]["content"]
     except (KeyError, Exception) as e:
         print(f"  WARN: Could not parse OpenRouter response: {e}")
         return

@@ -34,10 +34,12 @@ else:
     LLM_STRICT_JSON_SCHEMA = False
 
 # Wiki config
+# Extract + lint run on Groq (strict structured outputs via constrained decoding).
+# Summary runs on OpenRouter (flagship prose, no schema needed).
 WIKI_DIR = Path(os.environ.get("WIKI_DIR", str(ROOT_DIR / "wiki")))
-WIKI_EXTRACT_MODEL = os.environ.get("WIKI_EXTRACT_MODEL", "openai/gpt-oss-20b")
-WIKI_SUMMARY_MODEL = os.environ.get("WIKI_SUMMARY_MODEL", "deepseek/deepseek-chat")
-WIKI_LINT_MODEL = os.environ.get("WIKI_LINT_MODEL", "llama-3.1-8b-instant")
+WIKI_EXTRACT_MODEL = os.environ.get("WIKI_EXTRACT_MODEL", "openai/gpt-oss-120b")
+WIKI_SUMMARY_MODEL = os.environ.get("WIKI_SUMMARY_MODEL", "z-ai/glm-5.1")
+WIKI_LINT_MODEL = os.environ.get("WIKI_LINT_MODEL", "openai/gpt-oss-20b")
 
 # Embedder config — only needed for Graphiti (not required for wiki pipeline)
 EMBEDDER_API_KEY = os.environ.get("EMBEDDER_API_KEY", OPENROUTER_API_KEY)
@@ -77,3 +79,23 @@ FILLER_PHRASES = {
 
 # Voice fingerprint threshold (used by scripts/agents/map_speakers.py)
 HOST_SIMILARITY_THRESHOLD = float(os.environ.get("HOST_SIMILARITY_THRESHOLD", "0.70"))
+
+# Groq pricing (USD per 1M tokens). Groq does not return cost in the API
+# response, so we compute it at log time from token counts. Update when
+# Groq prices change — source: https://groq.com/pricing
+GROQ_PRICES_PER_1M: dict[str, tuple[float, float]] = {
+    # model: (input_per_1m, output_per_1m)
+    "openai/gpt-oss-120b": (0.15, 0.75),
+    "openai/gpt-oss-20b":  (0.075, 0.30),
+    "llama-3.3-70b-versatile": (0.59, 0.79),
+    "llama-3.1-8b-instant": (0.05, 0.08),
+}
+
+
+def groq_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Compute Groq call cost in USD. Returns 0.0 if model not in price list."""
+    prices = GROQ_PRICES_PER_1M.get(model)
+    if not prices:
+        return 0.0
+    in_price, out_price = prices
+    return (prompt_tokens * in_price + completion_tokens * out_price) / 1_000_000
