@@ -214,6 +214,106 @@ def test_read_index_parses_table(tmp_path):
     assert "huberman" in entry["aliases"]
 
 
+def test_merge_to_wiki_fuzzy_merges_steven_stephen(tmp_path):
+    """Spelling variants with >=0.90 ratio collapse to one page."""
+    wiki = _make_wiki(tmp_path)
+    merge_to_wiki({
+        "entities": [{"type": "Person", "name": "Stephen Bartlett",
+                      "slug": "stephen-bartlett", "attributes": {}}],
+        "edges": [], "observations": [],
+    }, "ep1", wiki)
+    merge_to_wiki({
+        "entities": [{"type": "Person", "name": "Steven Bartlett",
+                      "slug": "steven-bartlett", "attributes": {}}],
+        "edges": [], "observations": [],
+    }, "ep2", wiki)
+    people_pages = list((wiki / "people").glob("*.md"))
+    assert len(people_pages) == 1
+    fm = load_page(people_pages[0])
+    assert "Steven Bartlett" in fm["aliases"]
+
+
+def test_merge_to_wiki_does_not_merge_unrelated_people(tmp_path):
+    """Different people with same first name must stay separate."""
+    wiki = _make_wiki(tmp_path)
+    merge_to_wiki({
+        "entities": [{"type": "Person", "name": "Andrew Huberman",
+                      "slug": "andrew-huberman", "attributes": {}}],
+        "edges": [], "observations": [],
+    }, "ep1", wiki)
+    merge_to_wiki({
+        "entities": [{"type": "Person", "name": "Andrew Tate",
+                      "slug": "andrew-tate", "attributes": {}}],
+        "edges": [], "observations": [],
+    }, "ep2", wiki)
+    people_pages = sorted(p.name for p in (wiki / "people").glob("*.md"))
+    assert people_pages == ["andrew-huberman.md", "andrew-tate.md"]
+
+
+def test_merge_to_wiki_does_not_merge_across_types(tmp_path):
+    """Same name, different entity type — do not merge."""
+    wiki = _make_wiki(tmp_path)
+    merge_to_wiki({
+        "entities": [
+            {"type": "Concept", "name": "Flow", "slug": "flow", "attributes": {}},
+            {"type": "Product", "name": "Flow", "slug": "flow", "attributes": {}},
+        ],
+        "edges": [], "observations": [],
+    }, "ep1", wiki)
+    assert (wiki / "concepts" / "flow.md").exists()
+    assert (wiki / "products" / "flow.md").exists()
+
+
+def test_merge_to_wiki_drops_single_token_person_without_attrs(tmp_path):
+    """Unresolved speaker labels ('Dom') must not create pages."""
+    wiki = _make_wiki(tmp_path)
+    extraction = {
+        "entities": [
+            {"type": "Person", "name": "Dom", "slug": "dom", "attributes": {}},
+            {"type": "Person", "name": "Andrew Huberman",
+             "slug": "andrew-huberman", "attributes": {}},
+        ],
+        "edges": [], "observations": [],
+    }
+    merge_to_wiki(extraction, "ep1", wiki)
+    assert not (wiki / "people" / "dom.md").exists()
+    assert (wiki / "people" / "andrew-huberman.md").exists()
+
+
+def test_merge_to_wiki_keeps_single_token_person_with_role(tmp_path):
+    """Single-token name with a role_context attribute is legit — keep it."""
+    wiki = _make_wiki(tmp_path)
+    extraction = {
+        "entities": [{"type": "Person", "name": "Madonna", "slug": "madonna",
+                      "attributes": {"role_context": "Singer"}}],
+        "edges": [], "observations": [],
+    }
+    merge_to_wiki(extraction, "ep1", wiki)
+    assert (wiki / "people" / "madonna.md").exists()
+
+
+def test_merge_to_wiki_drops_edges_to_junk_person(tmp_path):
+    """Edges targeting a dropped junk Person must also be dropped."""
+    wiki = _make_wiki(tmp_path)
+    extraction = {
+        "entities": [
+            {"type": "Person", "name": "Dom", "slug": "dom", "attributes": {}},
+            {"type": "Person", "name": "Andrew Huberman",
+             "slug": "andrew-huberman", "attributes": {}},
+        ],
+        "edges": [{
+            "type": "WorksWith",
+            "from_name": "Andrew Huberman", "from_type": "Person",
+            "to_name": "Dom", "to_type": "Person",
+            "attributes": {}, "episode": "ep1",
+        }],
+        "observations": [],
+    }
+    merge_to_wiki(extraction, "ep1", wiki)
+    fm = load_page(wiki / "people" / "andrew-huberman.md")
+    assert "works_with" not in fm["relationships"]
+
+
 def test_merge_to_wiki_updates_index(tmp_path):
     wiki = _make_wiki(tmp_path)
     merge_to_wiki({
