@@ -18,6 +18,144 @@ _OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
 _EMPTY = {"entities": [], "edges": [], "observations": []}
 
+# Groq strict structured outputs require every object to have
+# `additionalProperties: false` and every field in `required`. Open-ended
+# attribute dicts are modeled as arrays of {key, value} pairs and converted
+# back to dicts on the Python side.
+_KV_PAIR_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["key", "value"],
+    "properties": {
+        "key": {"type": "string"},
+        "value": {"type": "string"},
+    },
+}
+
+_EXTRACTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["entities", "edges", "observations"],
+    "properties": {
+        "entities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["type", "name", "slug", "attributes"],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "Person", "Organization", "Concept", "Work",
+                            "Method", "Product", "Podcast", "Event", "Place",
+                        ],
+                    },
+                    "name": {"type": "string"},
+                    "slug": {"type": "string"},
+                    "attributes": {"type": "array", "items": _KV_PAIR_SCHEMA},
+                },
+            },
+        },
+        "edges": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "type", "from_name", "from_type",
+                    "to_name", "to_type", "attributes", "episode",
+                ],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "Hosts", "AppearsOn", "WorksWith", "AffiliatedWith",
+                            "Claims", "Recommends", "Describes", "References",
+                            "Sponsors", "RelatesTo",
+                        ],
+                    },
+                    "from_name": {"type": "string"},
+                    "from_type": {"type": "string"},
+                    "to_name": {"type": "string"},
+                    "to_type": {"type": "string"},
+                    "attributes": {"type": "array", "items": _KV_PAIR_SCHEMA},
+                    "episode": {"type": "string"},
+                },
+            },
+        },
+        "observations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["entity_name", "episode", "timestamp", "text"],
+                "properties": {
+                    "entity_name": {"type": "string"},
+                    "episode": {"type": "string"},
+                    "timestamp": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+
+
+def _kv_to_dict(pairs: list | None) -> dict:
+    if not pairs:
+        return {}
+    return {p.get("key", ""): p.get("value", "") for p in pairs if p.get("key")}
+
+
+def _recover_from_failed_generation(resp) -> dict | None:
+    """If Groq's strict validator rejected output, recover the partial JSON.
+
+    Groq returns ``{"error": {"code": "json_validate_failed",
+    "failed_generation": "<raw json>"}}`` — the LLM output is almost always
+    usable once missing required arrays (entities/edges/observations) are
+    filled in with ``[]``.
+
+    Returns the normalized dict, or None if recovery fails.
+    """
+    try:
+        payload = resp.json()
+    except Exception:
+        return None
+    err = payload.get("error") or {}
+    if err.get("code") != "json_validate_failed":
+        return None
+    raw = err.get("failed_generation")
+    if not raw:
+        return None
+    try:
+        partial = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(partial, dict):
+        return None
+    partial.setdefault("entities", [])
+    partial.setdefault("edges", [])
+    partial.setdefault("observations", [])
+    print(
+        f"  RECOVER: salvaged {len(partial['entities'])} entities, "
+        f"{len(partial['edges'])} edges from failed_generation"
+    )
+    return partial
+
+
+def _strip_markdown_fence(text: str) -> str:
+    """Strip leading/trailing ```...``` fences that GLM-5.1 wraps around output."""
+    s = text.strip()
+    if s.startswith("```"):
+        # drop the opening fence line
+        nl = s.find("\n")
+        if nl != -1:
+            s = s[nl + 1:]
+    if s.endswith("```"):
+        s = s[:-3].rstrip()
+    return s
+
 _EXTRACT_SYSTEM = """\
 You extract structured knowledge from podcast transcript segments.
 
@@ -42,15 +180,23 @@ RULES:
 - Do NOT invent new edge types. Use RelatesTo as the fallback.
 - If you notice something interesting that doesn't fit — partial names, unclear entities, possible new frameworks — add it to observations. Never discard it.
 
-OUTPUT FORMAT (JSON object, no markdown):
+OUTPUT FORMAT (JSON object, strict schema enforced):
+- "attributes" is an ARRAY of {"key": "...", "value": "..."} pairs (NOT a dict).
+  This is required by the strict schema validator.
+
+Example:
 {
   "entities": [
-    {"type": "Person", "name": "Full Name", "slug": "full-name", "attributes": {"key": "value"}}
+    {"type": "Person", "name": "Full Name", "slug": "full-name",
+     "attributes": [{"key": "expertise", "value": "Neuroscience"}]}
   ],
   "edges": [
     {"type": "Claims", "from_name": "Full Name", "from_type": "Person",
      "to_name": "Concept Name", "to_type": "Concept",
-     "attributes": {"insight_type": "claim", "timestamp": "14:23", "youtube_url": "..."},
+     "attributes": [
+       {"key": "insight_type", "value": "claim"},
+       {"key": "timestamp", "value": "14:23"}
+     ],
      "episode": "YOUTUBE_ID"}
   ],
   "observations": [
@@ -104,7 +250,14 @@ def extract_chunk_json(chunk_text: str, index_content: str) -> dict:
                      "Content-Type": "application/json"},
             json={
                 "model": WIKI_EXTRACT_MODEL,
-                "response_format": {"type": "json_object"},
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "wiki_extraction",
+                        "strict": True,
+                        "schema": _EXTRACTION_SCHEMA,
+                    },
+                },
                 "messages": [
                     {"role": "system", "content": _EXTRACT_SYSTEM},
                     {"role": "user", "content": user_content},
@@ -118,20 +271,47 @@ def extract_chunk_json(chunk_text: str, index_content: str) -> dict:
         return dict(_EMPTY)
 
     if resp.status_code != 200:
-        print(f"  WARN: Groq returned {resp.status_code}: {resp.text[:200]}")
-        return dict(_EMPTY)
+        # Groq strict mode returns 400 + `failed_generation` when the LLM
+        # omits a required key (commonly an empty `observations: []`). The
+        # partial JSON is still usable — parse it and backfill the gaps.
+        result = _recover_from_failed_generation(resp)
+        if result is None:
+            print(f"  WARN: Groq returned {resp.status_code}: {resp.text[:2000]}")
+            return dict(_EMPTY)
+    else:
+        try:
+            raw = resp.json()["choices"][0]["message"]["content"]
+            result = json.loads(raw)
+        except (KeyError, json.JSONDecodeError) as e:
+            print(f"  WARN: Could not parse Groq response: {e}")
+            return dict(_EMPTY)
 
-    try:
-        raw = resp.json()["choices"][0]["message"]["content"]
-        result = json.loads(raw)
-        return {
-            "entities": result.get("entities") or [],
-            "edges": result.get("edges") or [],
-            "observations": result.get("observations") or [],
-        }
-    except (KeyError, json.JSONDecodeError) as e:
-        print(f"  WARN: Could not parse Groq response: {e}")
-        return dict(_EMPTY)
+    # Convert KV-pair arrays back to dicts so wiki_writer receives its
+    # expected shape (attributes as a dict).
+    entities = []
+    for ent in result.get("entities") or []:
+        entities.append({
+            "type": ent.get("type", ""),
+            "name": ent.get("name", ""),
+            "slug": ent.get("slug", ""),
+            "attributes": _kv_to_dict(ent.get("attributes")),
+        })
+    edges = []
+    for edge in result.get("edges") or []:
+        edges.append({
+            "type": edge.get("type", ""),
+            "from_name": edge.get("from_name", ""),
+            "from_type": edge.get("from_type", ""),
+            "to_name": edge.get("to_name", ""),
+            "to_type": edge.get("to_type", ""),
+            "attributes": _kv_to_dict(edge.get("attributes")),
+            "episode": edge.get("episode", ""),
+        })
+    return {
+        "entities": entities,
+        "edges": edges,
+        "observations": result.get("observations") or [],
+    }
 
 
 def write_episode_summary(
@@ -190,6 +370,8 @@ def write_episode_summary(
     except (KeyError, Exception) as e:
         print(f"  WARN: Could not parse OpenRouter response: {e}")
         return
+
+    content = _strip_markdown_fence(content)
 
     ep_path = wiki_dir / "_episodes" / f"{youtube_id}.md"
     ep_path.parent.mkdir(parents=True, exist_ok=True)

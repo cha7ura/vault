@@ -116,11 +116,13 @@ def extract_and_write_episode(
         # Extract entities + edges from this chunk
         extraction = extract_chunk_json(chunk_text, index_content)
 
-        # Stamp youtube_id on all edges and observations that lack an episode
+        # Force-stamp youtube_id on every edge/observation. We override rather
+        # than setdefault because the LLM sometimes copies the literal
+        # "YOUTUBE_ID" placeholder out of the prompt example.
         for edge in extraction.get("edges", []):
-            edge.setdefault("episode", youtube_id)
+            edge["episode"] = youtube_id
         for obs in extraction.get("observations", []):
-            obs.setdefault("episode", youtube_id)
+            obs["episode"] = youtube_id
 
         # Write to wiki (deterministic)
         touched = merge_to_wiki(extraction, youtube_id, wiki_dir)
@@ -186,6 +188,13 @@ async def extract_episode(episode_id: str, speaker_map: dict[str, dict]) -> dict
         """,
         (episode_id,),
     )
+
+    # speaker_map must be populated — without it the LLM treats raw
+    # "SPEAKER_00" labels as Person entities. Run Stage 1 PREP first.
+    if not speaker_map:
+        raise ValueError(
+            f"Episode {youtube_id} has no speaker_map — run stage 1 PREP first"
+        )
 
     # Filter to content (after intro)
     content_segments = [s for s in all_segments if (s["position"] or 0) >= intro_end]
