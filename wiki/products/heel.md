@@ -8,6 +8,8 @@ relationships:
   sponsors:
   - entity: '[[podcasts/unnamed-podcast]]'
     episode: ExTFPDITHww
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: ExTFPDITHww
 observations:
 - episode: ExTFPDITHww
   timestamp: 1709s-1716s

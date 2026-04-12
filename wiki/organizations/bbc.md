@@ -4,7 +4,10 @@ name: BBC
 slug: bbc
 aliases: []
 appearances: []
-relationships: {}
+relationships:
+  references:
+  - entity: '[[organizations/monzo]]'
+    episode: gP2_QOCrVO4
 observations:
 - episode: CwpSViM8MaY
   timestamp: 3491s-3496s

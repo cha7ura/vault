@@ -11,7 +11,7 @@ observations:
   text: Vice is the company where Melissa works.
 enriched: false
 created_at: '2026-04-11'
-updated_at: '2026-04-11'
+updated_at: '2026-04-12'
 org_type: company
 ---
 

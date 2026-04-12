@@ -20,7 +20,25 @@ relationships:
     episode: TovCz1Qh_24
   - entity: '[[podcasts/unnamed-podcast]]'
     episode: YHtZZ-kSGU8
-observations: []
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: GGTtZpswgfg
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: R0ibd_SSXH0
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: CwpSViM8MaY
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: ExTFPDITHww
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: kTuUtxjMCRA
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: YHtZZ-kSGU8
+observations:
+- episode: R0ibd_SSXH0
+  timestamp: 00:55:04
+  text: Fiverr mentioned as sponsor and service provider
+- episode: CwpSViM8MaY
+  timestamp: 01:17:01
+  text: Fiverr became a sponsor of the podcast.
 enriched: false
 created_at: '2026-04-12'
 updated_at: '2026-04-12'

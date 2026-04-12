@@ -2,7 +2,8 @@
 type: concept
 name: habits
 slug: habits
-aliases: []
+aliases:
+- habit
 appearances: []
 relationships: {}
 observations:

@@ -9,7 +9,10 @@ relationships:
   - role: co-founder
     entity: '[[organizations/monzo]]'
     episode: gP2_QOCrVO4
-observations: []
+observations:
+- episode: gP2_QOCrVO4
+  timestamp: 00:21:48
+  text: Name not found in index
 enriched: false
 created_at: '2026-04-12'
 updated_at: '2026-04-12'

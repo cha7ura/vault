@@ -73,6 +73,10 @@ observations:
 - episode: JF-_w4gvZec
   timestamp: '4:35'
   text: Mentions his father Barry Hearn, a prominent boxing promoter.
+- episode: YHtZZ-kSGU8
+  timestamp: 01:19:10
+  text: Steven Bartlett calls Eddie Hearn "relentless" and compares him to a character
+    he's met.
 enriched: false
 created_at: '2026-04-11'
 updated_at: '2026-04-12'

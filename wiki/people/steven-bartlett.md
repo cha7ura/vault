@@ -80,6 +80,10 @@ relationships:
     episode: qeEwAKeB4Ow
   - entity: '[[podcasts/unnamed-podcast]]'
     episode: 2PeHDoThIp8
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: teVW3Vw_B20
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: kSmFjdisM6Y
   claims:
   - insight_type: claim
     timestamp: 2444s-2451s
@@ -1884,6 +1888,743 @@ relationships:
     timestamp: '75:30'
     entity: '[[concepts/purpose]]'
     episode: 2PeHDoThIp8
+  - insight_type: claim
+    timestamp: 00:06:18
+    entity: '[[concepts/purpose]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:08:06
+    entity: '[[concepts/thoughts]]'
+    episode: prw1xtkdfhs
+  - insight_type: advice
+    timestamp: 00:09:17
+    entity: '[[methods/gamification]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:17:02
+    entity: '[[concepts/change]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:21:30
+    entity: '[[concepts/responsibility]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:25:41
+    entity: '[[concepts/learning]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:23:17
+    entity: '[[concepts/technical]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:48:56
+    entity: '[[concepts/failure]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:46:23
+    entity: '[[concepts/comfort-zone]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:53:19
+    entity: '[[concepts/ownership]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:53:19
+    entity: '[[concepts/responsibility]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:57:01
+    entity: '[[concepts/focus]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:57:04
+    entity: '[[concepts/concentration]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:57:07
+    entity: '[[concepts/resilience]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:57:13
+    entity: '[[concepts/courage]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:57:46
+    entity: '[[concepts/multitasking]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 01:01:13
+    entity: '[[concepts/divergent-thinking]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 01:01:49
+    entity: '[[concepts/convergent-thinking]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:02:11
+    entity: '[[concepts/anxiety]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    timestamp: 00:08:11
+    entity: '[[concepts/cytokines]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    timestamp: 00:08:29
+    entity: '[[concepts/muscle-repair]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    timestamp: 00:11:15
+    entity: '[[concepts/sleep-debt]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    entity: '[[concepts/sleepiness]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    entity: '[[concepts/sleep]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    entity: '[[concepts/light-exposure]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    timestamp: 00:49:51
+    entity: '[[concepts/sleep]]'
+    episode: 18iBvgUbSMk
+  - insight_type: warning
+    timestamp: 00:39:14
+    entity: '[[concepts/sleep]]'
+    episode: 18iBvgUbSMk
+  - insight_type: tip
+    timestamp: 00:47:32
+    entity: '[[concepts/sleep]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    timestamp: 00:47:58
+    entity: '[[concepts/sleep]]'
+    episode: 18iBvgUbSMk
+  - insight_type: advice
+    timestamp: 00:57:45
+    entity: '[[concepts/habits]]'
+    episode: 18iBvgUbSMk
+  - insight_type: advice
+    timestamp: 00:58:30
+    entity: '[[concepts/light-exposure]]'
+    episode: 18iBvgUbSMk
+  - insight_type: advice
+    timestamp: 00:59:20
+    entity: '[[concepts/sleep-opportunity]]'
+    episode: 18iBvgUbSMk
+  - insight_type: advice
+    timestamp: 00:57:58
+    entity: '[[concepts/stress]]'
+    episode: 18iBvgUbSMk
+  - insight_type: advice
+    timestamp: 00:57:58
+    entity: '[[concepts/anxiety]]'
+    episode: 18iBvgUbSMk
+  - insight_type: claim
+    timestamp: 00:20:10
+    entity: '[[concepts/fear]]'
+    episode: GGTtZpswgfg
+  - insight_type: claim
+    timestamp: 00:20:10
+    entity: '[[concepts/doubt]]'
+    episode: GGTtZpswgfg
+  - insight_type: claim
+    timestamp: 00:20:10
+    entity: '[[concepts/anxiety]]'
+    episode: GGTtZpswgfg
+  - insight_type: claim
+    timestamp: 00:44:11
+    entity: '[[concepts/human-connection]]'
+    episode: GGTtZpswgfg
+  - insight_type: claim
+    timestamp: 01:14:23
+    entity: '[[concepts/freelance-depression]]'
+    episode: GGTtZpswgfg
+  - insight_type: claim
+    timestamp: 00:47:09
+    entity: '[[concepts/loneliness]]'
+    episode: GGTtZpswgfg
+  - insight_type: claim
+    timestamp: 00:13:45
+    entity: '[[concepts/burnout]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:10:10
+    entity: '[[concepts/positive-affect]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:14:47
+    entity: '[[concepts/ego-depletion]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:20:38
+    entity: '[[concepts/burnout]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:20:41
+    entity: '[[concepts/control]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:21:08
+    entity: '[[concepts/community]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:21:35
+    entity: '[[concepts/loneliness]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: warning
+    timestamp: 00:23:45
+    entity: '[[concepts/loneliness]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:24:23
+    entity: '[[concepts/community]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:25:56
+    entity: '[[concepts/connection]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:26:47
+    entity: '[[concepts/connection]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:28:22
+    entity: '[[concepts/loneliness]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:29:22
+    entity: '[[concepts/creativity]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:30:55
+    entity: '[[concepts/executive-attention-network]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:31:02
+    entity: '[[concepts/salience-network]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:31:24
+    entity: '[[concepts/default-network]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:38:47
+    entity: '[[concepts/engagement]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:38:56
+    entity: '[[concepts/disengagement]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:39:11
+    entity: '[[concepts/disengagement]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:56:00
+    entity: '[[concepts/responsibility]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:57:42
+    entity: '[[concepts/stress]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 01:12:30
+    entity: '[[concepts/joy-of-work]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 01:12:09
+    entity: '[[concepts/connection]]'
+    episode: 3lkcGdU7BlY
+  - insight_type: claim
+    timestamp: 00:40:09
+    entity: '[[concepts/ptsd]]'
+    episode: 6m_UrMIN3rI
+  - insight_type: claim
+    timestamp: 00:40:09
+    entity: '[[concepts/anxiety]]'
+    episode: 6m_UrMIN3rI
+  - insight_type: claim
+    timestamp: 00:40:09
+    entity: '[[concepts/depression]]'
+    episode: 6m_UrMIN3rI
+  - insight_type: claim
+    timestamp: 01:32:11
+    entity: '[[products/huel]]'
+    episode: yH5YplNDjJM
+  - insight_type: claim
+    timestamp: 00:29:53
+    entity: '[[products/huel]]'
+    episode: R0ibd_SSXH0
+  - insight_type: claim
+    timestamp: 01:14:59
+    entity: '[[concepts/marriage]]'
+    episode: R0ibd_SSXH0
+  - insight_type: claim
+    timestamp: 01:20:50
+    entity: '[[concepts/unrealistic-expectations]]'
+    episode: R0ibd_SSXH0
+  - insight_type: claim
+    timestamp: 00:09:00
+    entity: '[[concepts/demons]]'
+    episode: k8voKz-2vBU
+  - insight_type: claim
+    timestamp: 00:47:55
+    entity: '[[concepts/midlife-crisis]]'
+    episode: k8voKz-2vBU
+  - insight_type: claim
+    timestamp: 00:47:55
+    entity: '[[concepts/psychological-impact]]'
+    episode: k8voKz-2vBU
+  - insight_type: claim
+    timestamp: 00:57:27
+    entity: '[[concepts/ptsd]]'
+    episode: k8voKz-2vBU
+  - insight_type: claim
+    timestamp: 01:02:55
+    entity: '[[concepts/personal-responsibility]]'
+    episode: k8voKz-2vBU
+  - insight_type: advice
+    timestamp: 01:16:01
+    entity: '[[concepts/midlife-crisis]]'
+    episode: k8voKz-2vBU
+  - insight_type: advice
+    timestamp: 01:16:23
+    entity: '[[concepts/comfort-zone]]'
+    episode: k8voKz-2vBU
+  - insight_type: claim
+    timestamp: 01:32:46
+    entity: '[[concepts/spirituality]]'
+    episode: k8voKz-2vBU
+  - insight_type: claim
+    timestamp: 00:06:13
+    entity: '[[concepts/vulnerability]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 00:51:50
+    entity: '[[concepts/intensity]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 00:54:15
+    entity: '[[concepts/pride]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 00:47:47
+    entity: '[[concepts/performance]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 00:57:31
+    entity: '[[concepts/mental-health]]'
+    episode: CwpSViM8MaY
+  - insight_type: advice
+    timestamp: 01:06:04
+    entity: '[[concepts/communication]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 01:18:20
+    entity: '[[concepts/health]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 01:18:32
+    entity: '[[concepts/confidence]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 01:28:39
+    entity: '[[concepts/recognition]]'
+    episode: CwpSViM8MaY
+  - insight_type: claim
+    timestamp: 00:02:12
+    entity: '[[concepts/social-expectations]]'
+    episode: QRTimA9lvZI
+  - insight_type: advice
+    timestamp: 00:09:55
+    entity: '[[concepts/social-media]]'
+    episode: QRTimA9lvZI
+  - insight_type: advice
+    timestamp: 00:09:55
+    entity: '[[concepts/context]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 00:38:08
+    entity: '[[concepts/confidence]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 00:40:57
+    entity: '[[concepts/soulmate]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 00:42:21
+    entity: '[[concepts/ambition]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 01:04:18
+    entity: '[[concepts/algorithms]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 01:04:22
+    entity: '[[concepts/echo-chambers]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 01:06:49
+    entity: '[[concepts/groupthink]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 01:00:50
+    entity: '[[concepts/responsibility]]'
+    episode: QRTimA9lvZI
+  - insight_type: advice
+    timestamp: 01:13:53
+    entity: '[[concepts/heartbreak]]'
+    episode: QRTimA9lvZI
+  - insight_type: claim
+    timestamp: 00:36:51
+    entity: '[[concepts/social-media]]'
+    episode: ExTFPDITHww
+  - insight_type: claim
+    timestamp: 00:39:59
+    entity: '[[concepts/space]]'
+    episode: ExTFPDITHww
+  - insight_type: claim
+    timestamp: 00:40:27
+    entity: '[[concepts/ego]]'
+    episode: ExTFPDITHww
+  - insight_type: claim
+    timestamp: 00:46:53
+    entity: '[[products/huel]]'
+    episode: teVW3Vw_B20
+  - insight_type: claim
+    timestamp: 00:41:55
+    entity: '[[concepts/marriage]]'
+    episode: teVW3Vw_B20
+  - insight_type: claim
+    timestamp: 00:41:55
+    entity: '[[concepts/health]]'
+    episode: teVW3Vw_B20
+  - insight_type: claim
+    timestamp: 01:37:48
+    entity: '[[concepts/violence]]'
+    episode: teVW3Vw_B20
+  - insight_type: claim
+    timestamp: 00:38:46
+    entity: '[[concepts/self-care]]'
+    episode: y2c-GQP2Rcs
+  - insight_type: claim
+    timestamp: 00:34:25
+    entity: '[[concepts/value]]'
+    episode: kTuUtxjMCRA
+  - insight_type: claim
+    timestamp: 00:39:32
+    entity: '[[concepts/anonymity]]'
+    episode: kTuUtxjMCRA
+  - insight_type: claim
+    timestamp: 00:44:29
+    entity: '[[concepts/social-media]]'
+    episode: kTuUtxjMCRA
+  - insight_type: claim
+    timestamp: 00:44:29
+    entity: '[[concepts/echo-chambers]]'
+    episode: kTuUtxjMCRA
+  - insight_type: advice
+    timestamp: 00:58:31
+    entity: '[[concepts/self-belief]]'
+    episode: kTuUtxjMCRA
+  - insight_type: claim
+    timestamp: 01:35:40
+    entity: '[[concepts/fear]]'
+    episode: kTuUtxjMCRA
+  - insight_type: claim
+    timestamp: 01:03:46
+    entity: '[[organizations/fiverr]]'
+    episode: TovCz1Qh_24
+  - insight_type: claim
+    timestamp: 01:26:29
+    entity: '[[concepts/extrinsic-reward]]'
+    episode: TovCz1Qh_24
+  - insight_type: claim
+    timestamp: 01:26:55
+    entity: '[[concepts/motivation]]'
+    episode: TovCz1Qh_24
+  - insight_type: claim
+    timestamp: 01:14:14
+    entity: '[[concepts/high-performance-expert]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    timestamp: 01:14:14
+    entity: '[[concepts/mindset]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    timestamp: 01:16:07
+    entity: '[[concepts/cancel-culture]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    timestamp: 01:19:57
+    entity: '[[concepts/cancel-culture]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    timestamp: 01:20:20
+    entity: '[[products/instagram]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    timestamp: 01:20:56
+    entity: '[[products/instagram]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    timestamp: 01:29:16
+    entity: '[[concepts/innovation]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    timestamp: 01:37:07
+    entity: '[[concepts/curiosity]]'
+    episode: OqLAZuie06U
+  - insight_type: advice
+    timestamp: 00:10:16
+    entity: '[[concepts/meditation]]'
+    episode: kSmFjdisM6Y
+  - insight_type: advice
+    timestamp: 00:17:13
+    entity: '[[concepts/grief]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:19:18
+    entity: '[[concepts/resilience]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:26:27
+    entity: '[[concepts/human-connection]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:33:28
+    entity: '[[concepts/kindness-economy]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:33:13
+    entity: '[[concepts/control]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:28:54
+    entity: '[[concepts/social-infrastructure]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:40:52
+    entity: '[[concepts/ego]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:41:04
+    entity: '[[concepts/spirit]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:41:04
+    entity: '[[concepts/soul]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:51:04
+    entity: '[[concepts/intuition]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:53:21
+    entity: '[[concepts/connection]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:53:21
+    entity: '[[concepts/community]]'
+    episode: kSmFjdisM6Y
+  - insight_type: advice
+    timestamp: 01:18:24
+    entity: '[[concepts/meditation]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 01:20:05
+    entity: '[[concepts/relationships]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 01:20:05
+    entity: '[[concepts/love]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 01:17:49
+    entity: '[[concepts/status-symbols]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 01:22:21
+    entity: '[[concepts/grief]]'
+    episode: kSmFjdisM6Y
+  - insight_type: claim
+    timestamp: 00:08:49
+    entity: '[[concepts/code]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:09:39
+    entity: '[[concepts/resilience]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:06:15
+    entity: '[[concepts/naivety]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:04:27
+    entity: '[[concepts/first-principle-thinking]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:11:21
+    entity: '[[concepts/privilege]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:12:11
+    entity: '[[concepts/risk]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:09:55
+    entity: '[[concepts/confidence]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:08:49
+    entity: '[[concepts/technical]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:09:49
+    entity: '[[concepts/indefatigable]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:36:11
+    entity: '[[concepts/authenticity]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:37:32
+    entity: '[[concepts/trust]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:02:44
+    entity: '[[concepts/anxiety]]'
+    episode: gP2_QOCrVO4
+  - insight_type: advice
+    timestamp: 01:08:05
+    entity: '[[concepts/sleep]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:14:58
+    entity: '[[concepts/vulnerability]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:36:54
+    entity: '[[concepts/bitcoin]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:36:58
+    entity: '[[concepts/bitcoin]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:00
+    entity: '[[concepts/bitcoin]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:02
+    entity: '[[concepts/bitcoin]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:05
+    entity: '[[concepts/bitcoin]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:06
+    entity: '[[concepts/bitcoin]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:10
+    entity: '[[concepts/bitcoin]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:24
+    entity: '[[concepts/cryptocurrency]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:36
+    entity: '[[concepts/cryptocurrency]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 01:37:41
+    entity: '[[concepts/ethereum]]'
+    episode: gP2_QOCrVO4
+  - insight_type: tip
+    timestamp: 01:39:05
+    entity: '[[concepts/cryptocurrency]]'
+    episode: gP2_QOCrVO4
+  - insight_type: tip
+    timestamp: 01:39:17
+    entity: '[[concepts/cryptocurrency]]'
+    episode: gP2_QOCrVO4
+  - insight_type: claim
+    timestamp: 00:14:03
+    entity: '[[concepts/fulfillment]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:14:03
+    entity: '[[concepts/passion]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:11:51
+    entity: '[[concepts/money]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:15:22
+    entity: '[[concepts/ego]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:26:28
+    entity: '[[concepts/sleep]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:27:12
+    entity: '[[concepts/sleep]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:24:53
+    entity: '[[concepts/depression]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:23:21
+    entity: '[[concepts/anxiety]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:42:25
+    entity: '[[concepts/anxiety]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:42:26
+    entity: '[[organizations/atai]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:42:11
+    entity: '[[products/huel]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:41:52
+    entity: '[[products/huel]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:52:28
+    entity: '[[concepts/control]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:52:34
+    entity: '[[concepts/communication]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:43:41
+    entity: '[[concepts/depression]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 00:58:20
+    entity: '[[concepts/ambition]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 01:10:56
+    entity: '[[concepts/ego]]'
+    episode: YHtZZ-kSGU8
+  - insight_type: claim
+    timestamp: 01:14:26
+    entity: '[[concepts/money]]'
+    episode: YHtZZ-kSGU8
   references:
   - entity: '[[people/nir-eyal]]'
     episode: P51RrJvsWXE
@@ -2175,6 +2916,92 @@ relationships:
     episode: qeEwAKeB4Ow
   - entity: '[[organizations/social-chain]]'
     episode: 2PeHDoThIp8
+  - entity: '[[concepts/cytokines]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[concepts/muscle-repair]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[concepts/melatonin]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[organizations/social-chain]]'
+    episode: GGTtZpswgfg
+  - entity: '[[works/lost-connections]]'
+    episode: GGTtZpswgfg
+  - entity: '[[organizations/amazon-web-services]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[organizations/twitch]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[products/huel]]'
+    episode: 6m_UrMIN3rI
+  - timestamp: 00:40:09
+    entity: '[[works/lost-connections]]'
+    episode: 6m_UrMIN3rI
+  - timestamp: 01:46:31
+    entity: '[[works/happy-sexy-millionaire]]'
+    episode: yH5YplNDjJM
+  - entity: '[[works/happy-sexy-millionaire]]'
+    episode: R0ibd_SSXH0
+  - entity: '[[people/alex-ferguson]]'
+    episode: CwpSViM8MaY
+  - entity: '[[people/ryan-giggs]]'
+    episode: CwpSViM8MaY
+  - entity: '[[people/gary-neville]]'
+    episode: CwpSViM8MaY
+  - entity: '[[people/rio-ferdinand]]'
+    episode: CwpSViM8MaY
+  - entity: '[[organizations/manchester-united]]'
+    episode: CwpSViM8MaY
+  - entity: '[[organizations/leeds]]'
+    episode: CwpSViM8MaY
+  - entity: '[[organizations/west-ham]]'
+    episode: CwpSViM8MaY
+  - entity: '[[organizations/bbc]]'
+    episode: CwpSViM8MaY
+  - entity: '[[_places/st-pancras]]'
+    episode: QRTimA9lvZI
+  - entity: '[[products/instagram]]'
+    episode: QRTimA9lvZI
+  - entity: '[[works/failosophy]]'
+    episode: QRTimA9lvZI
+  - entity: '[[works/how-to-fail]]'
+    episode: QRTimA9lvZI
+  - entity: '[[people/matt-hancock]]'
+    episode: QRTimA9lvZI
+  - entity: '[[organizations/social-chain]]'
+    episode: kTuUtxjMCRA
+  - entity: '[[products/nokia-3310]]'
+    episode: kTuUtxjMCRA
+  - timestamp: 01:28:02
+    entity: '[[works/lost-connections]]'
+    episode: kTuUtxjMCRA
+  - entity: '[[organizations/wpp]]'
+    episode: OqLAZuie06U
+  - entity: '[[organizations/publicis]]'
+    episode: OqLAZuie06U
+  - entity: '[[products/tik-tok]]'
+    episode: OqLAZuie06U
+  - entity: '[[products/snapchat]]'
+    episode: OqLAZuie06U
+  - entity: '[[products/instagram]]'
+    episode: OqLAZuie06U
+  - entity: '[[products/facetune]]'
+    episode: OqLAZuie06U
+  - entity: '[[organizations/snapchat]]'
+    episode: OqLAZuie06U
+  - entity: '[[organizations/twitter]]'
+    episode: OqLAZuie06U
+  - timestamp: 00:43:43
+    entity: '[[organizations/bbc]]'
+    episode: kSmFjdisM6Y
+  - entity: '[[people/simon-sinek]]'
+    episode: kSmFjdisM6Y
+  - entity: '[[people/nick-cave]]'
+    episode: kSmFjdisM6Y
+  - entity: '[[organizations/harvey-nichols]]'
+    episode: kSmFjdisM6Y
+  - entity: '[[organizations/national-crime-agency]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[concepts/dragon-s-den]]'
+    episode: gP2_QOCrVO4
   affiliated_with:
   - role: founder
     entity: '[[organizations/social-chain]]'
@@ -2248,6 +3075,18 @@ relationships:
   - role: founder
     entity: '[[organizations/five-seven]]'
     episode: XDYAYrvI5LM
+  - role: founder
+    entity: '[[organizations/social-chain]]'
+    episode: GGTtZpswgfg
+  - role: founder
+    entity: '[[organizations/social-chain]]'
+    episode: CwpSViM8MaY
+  - role: investor
+    entity: '[[products/huel]]'
+    episode: y2c-GQP2Rcs
+  - role: employee
+    entity: '[[organizations/thai]]'
+    episode: y2c-GQP2Rcs
   recommends:
   - entity: '[[products/huel]]'
     episode: foScUA0qbNs
@@ -2316,6 +3155,25 @@ relationships:
   - insight_type: advice
     entity: '[[products/tesla-cybertruck]]'
     episode: 2PeHDoThIp8
+  - insight_type: recommendation
+    timestamp: 01:30:31
+    entity: '[[products/huel]]'
+    episode: yH5YplNDjJM
+  - insight_type: recommendation
+    timestamp: 01:46:31
+    entity: '[[works/happy-sexy-millionaire]]'
+    episode: yH5YplNDjJM
+  - insight_type: recommendation
+    timestamp: 00:50:00
+    entity: '[[products/huel]]'
+    episode: QRTimA9lvZI
+  - entity: '[[products/huel-protein]]'
+    episode: OqLAZuie06U
+  - timestamp: 00:41:30
+    entity: '[[products/huel]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[organizations/fiverr]]'
+    episode: YHtZZ-kSGU8
   describes:
   - timestamp: 4422s
     entity: '[[concepts/commitment]]'
@@ -2340,6 +3198,36 @@ relationships:
     episode: YHtZZ-kSGU8
   - entity: '[[concepts/depression]]'
     episode: YHtZZ-kSGU8
+  - entity: '[[methods/cognitive-behavioral-therapy-for-insomnia]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[concepts/focus]]'
+    episode: QRTimA9lvZI
+  - entity: '[[concepts/communication]]'
+    episode: QRTimA9lvZI
+  - entity: '[[concepts/loneliness]]'
+    episode: QRTimA9lvZI
+  - insight_type: tip
+    entity: '[[methods/cold-showers]]'
+    episode: teVW3Vw_B20
+  - entity: '[[concepts/curiosity]]'
+    episode: y2c-GQP2Rcs
+  - entity: '[[concepts/chaos]]'
+    episode: y2c-GQP2Rcs
+  - entity: '[[concepts/stability]]'
+    episode: y2c-GQP2Rcs
+  - entity: '[[concepts/purpose]]'
+    episode: y2c-GQP2Rcs
+  - entity: '[[products/huel-protein]]'
+    episode: OqLAZuie06U
+  - timestamp: 00:20:46
+    entity: '[[organizations/monzo]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[concepts/customer-service]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[concepts/culture]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[products/nokia]]'
+    episode: gP2_QOCrVO4
   hosts:
   - entity: '[[podcasts/unnamed-podcast]]'
     episode: j1i4WkJ4qFo
@@ -2390,6 +3278,28 @@ relationships:
     episode: 2PeHDoThIp8
   - entity: '[[podcasts/diary-of-a-ceo]]'
     episode: 2PeHDoThIp8
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: prw1xtkdfhs
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: GGTtZpswgfg
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: 6m_UrMIN3rI
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: k8voKz-2vBU
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: ExTFPDITHww
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: y2c-GQP2Rcs
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: kTuUtxjMCRA
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: kSmFjdisM6Y
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: gP2_QOCrVO4
   works_with:
   - entity: '[[people/krissy-cela]]'
     episode: j1i4WkJ4qFo
@@ -2415,6 +3325,36 @@ relationships:
     episode: XDYAYrvI5LM
   - entity: '[[people/hugh-laurie]]'
     episode: XDYAYrvI5LM
+  - entity: '[[organizations/social-chain]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[people/kate-moyle]]'
+    episode: R0ibd_SSXH0
+  - entity: '[[organizations/manchester-united]]'
+    episode: CwpSViM8MaY
+  - entity: '[[people/rio-ferdinand]]'
+    episode: CwpSViM8MaY
+  - entity: '[[people/professor-green]]'
+    episode: y2c-GQP2Rcs
+  - entity: '[[people/ben-fogle]]'
+    episode: kTuUtxjMCRA
+  - entity: '[[people/matt-hiroki]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[people/anne-bowden]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[people/paul-rippon]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[people/tristan-thomas]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[organizations/gymshark]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[products/beats]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[organizations/twitch]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[organizations/pokerstars]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[organizations/heineken]]'
+    episode: YHtZZ-kSGU8
   relates_to:
   - timestamp: 4719s
     entity: '[[concepts/death]]'
@@ -2452,6 +3392,54 @@ relationships:
     episode: qeEwAKeB4Ow
   - entity: '[[organizations/social-chain]]'
     episode: 2PeHDoThIp8
+  - entity: '[[organizations/apple]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[organizations/youtube]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[methods/cognitive-behavioral-therapy-for-insomnia]]'
+    episode: 18iBvgUbSMk
+  - entity: '[[concepts/positive-affect]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[concepts/negative-affect]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[concepts/resilience]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[concepts/burnout]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[concepts/collective-effervescence]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[concepts/errand-paralysis]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[methods/zoom-bingo]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[concepts/ego-depletion]]'
+    episode: 3lkcGdU7BlY
+  - entity: '[[concepts/sex]]'
+    episode: R0ibd_SSXH0
+  - entity: '[[people/michael-jackson]]'
+    episode: teVW3Vw_B20
+  - timestamp: 01:28:30
+    entity: '[[_places/new-york-city]]'
+    episode: kTuUtxjMCRA
+  - entity: '[[concepts/social-media]]'
+    episode: OqLAZuie06U
+  - insight_type: claim
+    entity: '[[concepts/fundraising]]'
+    episode: gP2_QOCrVO4
+  - entity: '[[people/joe-rogan]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[people/eddie-hearn]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[people/piers-morgan]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[products/beats]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[organizations/gymshark]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[organizations/twitch]]'
+    episode: YHtZZ-kSGU8
+  - entity: '[[products/spotify]]'
+    episode: YHtZZ-kSGU8
 observations:
 - episode: j1i4WkJ4qFo
   timestamp: 3041s
@@ -2504,6 +3492,155 @@ observations:
   timestamp: 4080s-4094s
   text: One of the great pioneering products that My Energy have created is this thing
     called the Zappy.
+- episode: prw1xtkdfhs
+  timestamp: 01:02:51
+  text: mentions using Twitter and LinkedIn to communicate with audience
+- episode: 18iBvgUbSMk
+  timestamp: 00:04:12
+  text: Mentions Apple devices that track sleep
+- episode: 18iBvgUbSMk
+  timestamp: 00:05:30
+  text: Calls the snooze button pointless and unsupported by research
+- episode: 18iBvgUbSMk
+  timestamp: 00:06:45
+  text: 'Lists common sleep hygiene advice: warm bath, no coffee, no alcohol'
+- episode: 18iBvgUbSMk
+  timestamp: 00:07:20
+  text: Emphasizes consistency of wake‑up time over bedtime
+- episode: 18iBvgUbSMk
+  timestamp: 00:09:05
+  text: Notes that light exposure from phones cues the brain and reduces melatonin
+- episode: 18iBvgUbSMk
+  timestamp: 00:10:40
+  text: Describes CBT for insomnia as a method to retrain sleep drive
+- episode: 18iBvgUbSMk
+  timestamp: 01:00:55
+  text: Mentions website sleepyheadclinic.co.uk
+- episode: 18iBvgUbSMk
+  timestamp: 01:01:05
+  text: Mentions online course at sleepyheadprogram.com
+- episode: GGTtZpswgfg
+  timestamp: 00:27:07
+  text: belief at age 14 that he would be successful, driven by perceived skill advantage
+- episode: GGTtZpswgfg
+  timestamp: 01:13:40
+  text: Mentions his friend who worked at Social Chain and experienced burnout.
+- episode: 3lkcGdU7BlY
+  timestamp: 00:49:46
+  text: Notes that many high‑achieving individuals (e.g., Kelly Holmes, Tom Daley,
+    Andy Murray, Michael Phelps) share significant childhood trauma.
+- episode: 3lkcGdU7BlY
+  timestamp: 00:51:43
+  text: Observes that trauma can drive obsessive pursuit of success, sometimes leading
+    to unhappiness.
+- episode: 3lkcGdU7BlY
+  timestamp: 00:53:21
+  text: Describes his experience working at YouTube during a period of mass shootings
+    and the moral dilemmas involved.
+- episode: 6m_UrMIN3rI
+  timestamp: 00:03:55
+  text: One of the jobs that people, especially Gen Z in the UK, aspire to most is
+    to become a YouTuber.
+- episode: R0ibd_SSXH0
+  timestamp: 00:14:22
+  text: Steven mentions using a vibrator, which is not present in the product index.
+- episode: k8voKz-2vBU
+  timestamp: 00:09:00
+  text: demons run the show from the back room
+- episode: k8voKz-2vBU
+  timestamp: 00:27:42
+  text: biggest investor in the world in psychedelics ... strips back the ego.
+- episode: k8voKz-2vBU
+  timestamp: 00:47:55
+  text: Discusses the psychological impact and midlife crises caused by living a life
+    not true to oneself.
+- episode: k8voKz-2vBU
+  timestamp: 00:57:27
+  text: References PTSD experiences of a military commando returning home.
+- episode: k8voKz-2vBU
+  timestamp: 00:48:16
+  text: Mentions higher suicide rates in the LGBTQ community, highlighting identity
+    struggles.
+- episode: CwpSViM8MaY
+  timestamp: 00:05:27
+  text: Say yes to everything, when you get to the top, start saying no to everything.
+- episode: CwpSViM8MaY
+  timestamp: 00:06:13
+  text: People can't feel vulnerable; trying new things brings vulnerability and exposure
+    to criticism.
+- episode: CwpSViM8MaY
+  timestamp: 00:18:05
+  text: Emphasizes the importance of high standards in football clubs and life.
+- episode: CwpSViM8MaY
+  timestamp: 00:18:53
+  text: Discusses how culture, punctuality, work ethic, intensity, and respect create
+    a winning environment.
+- episode: CwpSViM8MaY
+  timestamp: 00:19:54
+  text: Describes how culture leaders like Ryan Giggs and Gary Neville filtered the
+    club culture to younger players.
+- episode: CwpSViM8MaY
+  timestamp: 00:37:12
+  text: Claims that Huel helped him become a better human by improving health, mental
+    clarity and focus.
+- episode: CwpSViM8MaY
+  timestamp: 01:20:07
+  text: Steven Bartlett is on the board of The Gym Group.
+- episode: QRTimA9lvZI
+  timestamp: 00:25:51
+  text: Emphasizes focus and certainty in professional life.
+- episode: QRTimA9lvZI
+  timestamp: 00:26:25
+  text: States communication is incredibly important.
+- episode: QRTimA9lvZI
+  timestamp: 00:35:47
+  text: Mentions being scared of being lonely.
+- episode: QRTimA9lvZI
+  timestamp: 01:13:53
+  text: you just basically have to tough it out and to try as much as you can in believing
+    that your future will be better
+- episode: QRTimA9lvZI
+  timestamp: 01:28:30
+  text: your book, Failosophy, it's everywhere
+- episode: ExTFPDITHww
+  timestamp: 01:17:41
+  text: Discusses love languages and identifies Jim's primary love language as words
+    of affirmation
+- episode: teVW3Vw_B20
+  timestamp: 01:37:48
+  text: says Silence is violence.
+- episode: y2c-GQP2Rcs
+  timestamp: 01:00:35
+  text: Credits Fiverr for assets used to promote his book.
+- episode: y2c-GQP2Rcs
+  timestamp: 01:14:15
+  text: Mentions Shottie Horror.
+- episode: kTuUtxjMCRA
+  timestamp: 00:17:42
+  text: The education system is incentivized by grades and money
+- episode: kSmFjdisM6Y
+  timestamp: 00:05:07
+  text: My mother died very suddenly of encephalitis when I was 16.
+- episode: kSmFjdisM6Y
+  timestamp: 00:16:13
+  text: Rumi talks about the bruises, the poet, Sufi poet Rumi, the bruises and how
+    we learn from those bruises.
+- episode: kSmFjdisM6Y
+  timestamp: 01:19:42
+  text: Uses visual metaphor 'Closing the tabs' to describe mental clearing.
+- episode: kSmFjdisM6Y
+  timestamp: 01:21:40
+  text: Mentions manifesting his new relationship.
+- episode: kSmFjdisM6Y
+  timestamp: 01:22:21
+  text: Talks about grieving after marriage ended.
+- episode: gP2_QOCrVO4
+  timestamp: 01:10:15
+  text: Red phone dramatization; described as a pink Nokia used as a wake‑up alert
+    for Monzo emergencies.
+- episode: gP2_QOCrVO4
+  timestamp: 01:08:05
+  text: Advocated keeping phone out of bedroom to improve sleep, charging it in hallway.
 enriched: false
 created_at: '2026-04-11'
 updated_at: '2026-04-12'

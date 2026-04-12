@@ -8,6 +8,8 @@ relationships:
   appears_on:
   - entity: '[[podcasts/unnamed-podcast]]'
     episode: prw1xtkdfhs
+  - entity: '[[podcasts/diary-of-a-ceo]]'
+    episode: prw1xtkdfhs
   references:
   - entity: '[[people/elon-musk]]'
     episode: prw1xtkdfhs
@@ -62,6 +64,54 @@ relationships:
     timestamp: 3401s
     entity: '[[concepts/social-media]]'
     episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:11:58
+    entity: '[[concepts/passion]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:19:25
+    entity: '[[concepts/consistency]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:18:30
+    entity: '[[concepts/consistency]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:19:21
+    entity: '[[concepts/responsibility]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:18:27
+    entity: '[[concepts/intensity]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:35:46
+    entity: '[[products/huel]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:47:10
+    entity: '[[products/peloton]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:44:44
+    entity: '[[concepts/discomfort]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:54:35
+    entity: '[[concepts/autonomy]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:56:41
+    entity: '[[concepts/distraction]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 01:03:47
+    entity: '[[concepts/innovation]]'
+    episode: prw1xtkdfhs
+  - insight_type: claim
+    timestamp: 00:54:55
+    entity: '[[concepts/entrepreneurship]]'
+    episode: prw1xtkdfhs
   recommends:
   - entity: '[[products/huel]]'
     episode: prw1xtkdfhs
@@ -69,7 +119,13 @@ relationships:
   - timestamp: 2832s
     entity: '[[products/peloton]]'
     episode: prw1xtkdfhs
-observations: []
+observations:
+- episode: prw1xtkdfhs
+  timestamp: 00:17:58
+  text: Placeholder name used for the guest; not a specific individual in the index.
+- episode: prw1xtkdfhs
+  timestamp: 00:59:22
+  text: notes that inspiration floods in during walks, gym, and shower
 enriched: false
 created_at: '2026-04-12'
 updated_at: '2026-04-12'

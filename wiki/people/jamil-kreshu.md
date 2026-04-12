@@ -13,7 +13,10 @@ relationships:
     timestamp: 1178s
     entity: '[[concepts/consistency]]'
     episode: prw1xtkdfhs
-observations: []
+observations:
+- episode: prw1xtkdfhs
+  timestamp: 00:01:04
+  text: so who is jamil Kreshu?
 enriched: false
 created_at: '2026-04-12'
 updated_at: '2026-04-12'

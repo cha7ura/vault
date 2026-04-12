@@ -1,0 +1,13 @@
+---
+type: concept
+name: social infrastructure
+slug: social-infrastructure
+aliases: []
+appearances: []
+relationships: {}
+observations: []
+enriched: false
+created_at: '2026-04-12'
+updated_at: '2026-04-12'
+---
+
