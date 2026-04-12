@@ -39,6 +39,8 @@ interface Props {
   typeFilter: Set<string>;
   searchQuery: string;
   onNodeClick?: (node: GraphNode) => void;
+  width?: number;
+  height?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,24 +53,27 @@ export default function ForceGraph({
   typeFilter,
   searchQuery,
   onNodeClick,
+  width: widthProp,
+  height: heightProp,
 }: Props) {
   const router = useRouter();
   const fgRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
 
-  // Track available size
+  // Track available size (only used when width/height props are not provided)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
+    if (widthProp !== undefined && heightProp !== undefined) return;
     function updateSize() {
       setDimensions({
-        width: window.innerWidth - SIDEBAR_WIDTH,
-        height: window.innerHeight,
+        width: widthProp ?? window.innerWidth - SIDEBAR_WIDTH,
+        height: heightProp ?? window.innerHeight,
       });
     }
     updateSize();
     window.addEventListener("resize", updateSize);
     return () => window.removeEventListener("resize", updateSize);
-  }, []);
+  }, [widthProp, heightProp]);
 
   // ---- Filtered data -------------------------------------------------------
 
@@ -161,8 +166,8 @@ export default function ForceGraph({
   return (
     <ForceGraph2D
       ref={fgRef}
-      width={dimensions.width}
-      height={dimensions.height}
+      width={widthProp ?? dimensions.width}
+      height={heightProp ?? dimensions.height}
       graphData={graphData}
       backgroundColor={BG_COLOR}
       nodeCanvasObject={nodeCanvasObject}
