@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 import matter from "gray-matter";
 
 // ---------------------------------------------------------------------------
@@ -196,4 +197,192 @@ export function parsePage(filePath: string): WikiPage {
     outlinks,
     path: filePath,
   };
+}
+
+// ---------------------------------------------------------------------------
+// DIR_TO_TYPE mapping
+// ---------------------------------------------------------------------------
+
+export const DIR_TO_TYPE: Record<string, string> = {
+  people: "person",
+  concepts: "concept",
+  organizations: "organization",
+  works: "work",
+  methods: "method",
+  products: "product",
+  podcasts: "podcast",
+  _places: "place",
+  _episodes: "episode",
+};
+
+const ENTITY_DIRS = Object.keys(DIR_TO_TYPE);
+
+// ---------------------------------------------------------------------------
+// loadWiki
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk entity subdirectories under wikiDir and parse every .md file.
+ * Returns a Map keyed by "type/slug" (e.g. "person/holly-tucker").
+ */
+export function loadWiki(wikiDir: string): Map<string, WikiPage> {
+  const pages = new Map<string, WikiPage>();
+
+  for (const dir of ENTITY_DIRS) {
+    const dirPath = path.join(wikiDir, dir);
+    if (!fs.existsSync(dirPath)) continue;
+
+    const typeName = DIR_TO_TYPE[dir];
+    const entries = fs.readdirSync(dirPath);
+
+    for (const entry of entries) {
+      if (!entry.endsWith(".md")) continue;
+      const filePath = path.join(dirPath, entry);
+      const page = parsePage(filePath);
+      // For episodes, slug comes from youtube_id (fm field); for others from fm.slug.
+      // If slug is empty fall back to filename without extension.
+      const slug = page.slug || path.basename(entry, ".md");
+      const key = `${typeName}/${slug}`;
+      pages.set(key, { ...page, type: typeName, slug });
+    }
+  }
+
+  return pages;
+}
+
+// ---------------------------------------------------------------------------
+// buildGraph
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a graph of nodes and links from a loaded wiki Map.
+ * Phantom nodes are created for targets that aren't in the Map.
+ * Node val = total degree (in + out).
+ */
+export function buildGraph(pages: Map<string, WikiPage>): GraphData {
+  const nodeMap = new Map<string, GraphNode>();
+
+  // Create a node for every known page
+  for (const [id, page] of pages) {
+    nodeMap.set(id, { id, type: page.type, name: page.name, val: 0 });
+  }
+
+  const links: GraphLink[] = [];
+
+  for (const [sourceId, page] of pages) {
+    for (const outlink of page.outlinks) {
+      const targetType = DIR_TO_TYPE[outlink.type] ?? outlink.type;
+      const targetId = `${targetType}/${outlink.slug}`;
+
+      // Create phantom node if target not in nodeMap
+      if (!nodeMap.has(targetId)) {
+        const phantomName = outlink.slug
+          .split("-")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+        nodeMap.set(targetId, {
+          id: targetId,
+          type: targetType,
+          name: phantomName,
+          val: 0,
+        });
+      }
+
+      links.push({
+        source: sourceId,
+        target: targetId,
+        rel: outlink.rel ?? "mentions",
+      });
+    }
+  }
+
+  // Compute val (degree) for each node
+  for (const link of links) {
+    const src = nodeMap.get(link.source);
+    const tgt = nodeMap.get(link.target);
+    if (src) src.val += 1;
+    if (tgt) tgt.val += 1;
+  }
+
+  return { nodes: Array.from(nodeMap.values()), links };
+}
+
+// ---------------------------------------------------------------------------
+// getBackrefs
+// ---------------------------------------------------------------------------
+
+/**
+ * Return all pages whose outlinks reference the given targetId ("type/slug").
+ * Outlinks store dir names (e.g. "people"), so we convert via DIR_TO_TYPE.
+ */
+export function getBackrefs(
+  targetId: string,
+  pages: Map<string, WikiPage>
+): WikiPage[] {
+  const [targetType, targetSlug] = targetId.split("/");
+  const result: WikiPage[] = [];
+
+  for (const page of pages.values()) {
+    const matches = page.outlinks.some(
+      (o) =>
+        o.slug === targetSlug &&
+        (DIR_TO_TYPE[o.type] ?? o.type) === targetType
+    );
+    if (matches) result.push(page);
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// parseIndex
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse the markdown table in an _index.md file.
+ * Skips header rows (those containing "---" or "Name").
+ * Returns an array of IndexEntry objects.
+ */
+export function parseIndex(indexPath: string): IndexEntry[] {
+  const raw = fs.readFileSync(indexPath, "utf-8");
+  const entries: IndexEntry[] = [];
+
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("|")) continue;
+    if (trimmed.includes("---") || trimmed.includes("Name")) continue;
+
+    const cols = trimmed
+      .split("|")
+      .map((c) => c.trim())
+      .filter((c) => c !== "");
+
+    if (cols.length < 3) continue;
+
+    entries.push({
+      name: cols[0],
+      type: cols[1],
+      file: cols[2],
+      aliases: cols[3] ?? "",
+    });
+  }
+
+  return entries;
+}
+
+// ---------------------------------------------------------------------------
+// Singleton cache
+// ---------------------------------------------------------------------------
+
+const WIKI_DIR =
+  process.env.VAULT_WIKI_DIR ?? path.join(process.cwd(), "..", "wiki");
+let _cache: Map<string, WikiPage> | null = null;
+
+export function getWiki(): Map<string, WikiPage> {
+  if (!_cache) _cache = loadWiki(WIKI_DIR);
+  return _cache;
+}
+
+export function invalidateCache(): void {
+  _cache = null;
 }
