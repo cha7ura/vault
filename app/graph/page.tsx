@@ -45,7 +45,7 @@ export default function GraphPage() {
 
   // Fetch graph data on mount
   useEffect(() => {
-    fetch("/api/graph")
+    fetch("/api/wiki-graph")
       .then((r) => r.json())
       .then((d: GraphData) => setData(d))
       .catch(console.error);

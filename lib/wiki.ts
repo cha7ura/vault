@@ -379,7 +379,7 @@ export function parseIndex(indexPath: string): IndexEntry[] {
 // ---------------------------------------------------------------------------
 
 const WIKI_DIR =
-  process.env.VAULT_WIKI_DIR ?? path.join(process.cwd(), "..", "wiki");
+  process.env.VAULT_WIKI_DIR ?? path.join(process.cwd(), "wiki");
 let _cache: Map<string, WikiPage> | null = null;
 
 export function getWiki(): Map<string, WikiPage> {

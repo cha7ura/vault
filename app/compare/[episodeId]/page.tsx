@@ -5,26 +5,8 @@ import { use } from "react";
 import YouTube, { YouTubeEvent } from "react-youtube";
 import { TranscriptPanel } from "@/components/transcript-panel";
 import { formatTime } from "@/lib/utils";
-import { fetchEpisode, fetchSegments } from "@/lib/api";
-import type { Episode, Segment } from "@/lib/types";
-
-const ALL_DIARIZERS = [
-  "nemo-msdd",
-  "nemo-msdd-demucs",
-  "pyannote-3.1",
-  "pyannote-3.1-demucs",
-] as const;
-
-const LABELS: Record<string, string> = {
-  "nemo-msdd": "NeMo MSDD",
-  "nemo-msdd-demucs": "NeMo MSDD + Demucs",
-  "pyannote-3.1": "Pyannote 3.1",
-  "pyannote-3.1-demucs": "Pyannote 3.1 + Demucs",
-};
-
-function labelFor(d: string) {
-  return LABELS[d] ?? d;
-}
+import { fetchEpisode, fetchSegments, fetchBenchmarks } from "@/lib/api";
+import type { Episode, Segment, BenchmarkData } from "@/lib/types";
 
 export default function ComparePage({
   params,
@@ -32,42 +14,38 @@ export default function ComparePage({
   params: Promise<{ episodeId: string }>;
 }) {
   const { episodeId } = use(params);
+  const id = parseInt(episodeId, 10);
 
   const [episode, setEpisode] = useState<Episode | null>(null);
-  const [segmentsByDiarizer, setSegmentsByDiarizer] = useState<
-    Record<string, Segment[]>
-  >({});
+  const [pyannoteSegments, setPyannoteSegments] = useState<Segment[]>([]);
+  const [whisperSegments, setWhisperSegments] = useState<Segment[]>([]);
+  const [benchmarks, setBenchmarks] = useState<BenchmarkData[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const playerRef = useRef<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch episode + segments for all diarizers (only keep those with data)
+  // Fetch data
   useEffect(() => {
     async function load() {
       try {
-        const ep = await fetchEpisode(episodeId);
+        const [ep, pySegs, wdSegs, bm] = await Promise.all([
+          fetchEpisode(id),
+          fetchSegments(id, "pyannote"),
+          fetchSegments(id, "whisper-diarization"),
+          fetchBenchmarks(id),
+        ]);
         setEpisode(ep);
-
-        const results = await Promise.all(
-          ALL_DIARIZERS.map(async (d) => ({
-            diarizer: d,
-            segments: await fetchSegments(episodeId, d),
-          }))
-        );
-
-        const map: Record<string, Segment[]> = {};
-        for (const { diarizer, segments } of results) {
-          if (segments.length > 0) map[diarizer] = segments;
-        }
-        setSegmentsByDiarizer(map);
+        setPyannoteSegments(pySegs);
+        setWhisperSegments(wdSegs);
+        setBenchmarks(bm);
       } catch (e: any) {
         setError(e.message);
       }
     }
     load();
-  }, [episodeId]);
+  }, [id]);
 
   // YouTube polling
   const startPolling = useCallback(() => {
@@ -77,7 +55,7 @@ export default function ComparePage({
         const t = playerRef.current.getCurrentTime();
         if (typeof t === "number") setCurrentTime(t);
       }
-    }, 100);
+    }, 250);
   }, []);
 
   const stopPolling = useCallback(() => {
@@ -104,7 +82,6 @@ export default function ComparePage({
   const seekTo = useCallback((seconds: number) => {
     if (playerRef.current) {
       playerRef.current.seekTo(seconds, true);
-      playerRef.current.playVideo();
       setCurrentTime(seconds);
     }
   }, []);
@@ -125,9 +102,8 @@ export default function ComparePage({
     );
   }
 
-  // Preserve display order: raw first, demucs second, grouped by engine
-  const diarizers = ALL_DIARIZERS.filter((d) => d in segmentsByDiarizer);
-  const colCount = diarizers.length || 1;
+  const pyBenchmark = benchmarks.find((b) => b.diarizer === "pyannote") ?? null;
+  const wdBenchmark = benchmarks.find((b) => b.diarizer === "whisper-diarization") ?? null;
 
   return (
     <div className="flex flex-col h-screen">
@@ -138,13 +114,10 @@ export default function ComparePage({
           {formatTime(currentTime)}
           {episode.duration ? ` / ${formatTime(episode.duration)}` : ""}
         </span>
-        <span className="text-xs px-2 py-1 bg-muted rounded">
-          {diarizers.length} diarizer{diarizers.length !== 1 ? "s" : ""}
-        </span>
       </header>
 
       {/* YouTube Player */}
-      <div className="w-full max-w-3xl mx-auto px-4 pt-4">
+      <div className="w-full max-w-4xl mx-auto px-4 pt-4">
         <div className="aspect-video bg-black rounded-lg overflow-hidden">
           <YouTube
             videoId={episode.youtube_id}
@@ -161,27 +134,26 @@ export default function ComparePage({
         </div>
       </div>
 
-      {/* Transcript panels — one per diarizer */}
-      <div
-        className="flex-1 border-t mt-4 min-h-0 grid gap-0"
-        style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}
-      >
-        {diarizers.map((d, i) => (
-          <div
-            key={d}
-            className={`min-h-0 overflow-hidden ${
-              i > 0 ? "border-l border-border" : ""
-            }`}
-          >
-            <TranscriptPanel
-              title={labelFor(d)}
-              segments={segmentsByDiarizer[d]}
-              currentTime={currentTime}
-              benchmark={null}
-              onSeek={seekTo}
-            />
-          </div>
-        ))}
+      {/* Transcript Panels */}
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-0 border-t mt-4 min-h-0">
+        <div className="border-r min-h-0 flex flex-col">
+          <TranscriptPanel
+            title="PyAnnote"
+            segments={pyannoteSegments}
+            currentTime={currentTime}
+            benchmark={pyBenchmark}
+            onSeek={seekTo}
+          />
+        </div>
+        <div className="min-h-0 flex flex-col">
+          <TranscriptPanel
+            title="whisper-diarization"
+            segments={whisperSegments}
+            currentTime={currentTime}
+            benchmark={wdBenchmark}
+            onSeek={seekTo}
+          />
+        </div>
       </div>
     </div>
   );

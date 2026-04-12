@@ -96,6 +96,25 @@ export default async function HomePage() {
             </div>
           )}
 
+          {/* Knowledge Graph */}
+          <div className="mb-8">
+            <Link
+              href="/graph"
+              className="group relative bg-card border border-border rounded-xl p-6 hover:border-primary/50 hover:shadow-lg transition-all flex items-center gap-4"
+            >
+              <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
+                <span className="text-2xl">🕸️</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold group-hover:text-primary transition-colors">Knowledge Graph</h2>
+                <p className="text-sm text-muted-foreground">
+                  Explore entities, relationships, and observations extracted from episodes
+                </p>
+              </div>
+              <ArrowRight className="ml-auto h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </Link>
+          </div>
+
           {/* Add Channel Section */}
           <div className="bg-card border border-border rounded-xl p-8">
             <div className="flex items-start gap-6">

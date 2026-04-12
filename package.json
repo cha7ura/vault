@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "ingest": "tsx scripts/bulk-ingest.ts",
     "hydrate-guests": "tsx scripts/hydrate-guests.ts"
   },
@@ -35,6 +37,7 @@
     "react-dom": "^19.0.0",
     "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^10.1.0",
+    "react-youtube": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "sonner": "^1.7.2",
     "tailwind-merge": "^3.3.0",
@@ -48,9 +51,11 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.3.2",
+    "@vitejs/plugin-react": "^6.0.1",
     "tailwindcss": "^4",
     "tsx": "^4.19.0",
     "tw-animate-css": "^1.3.7",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
