@@ -2,7 +2,7 @@
 ---
 type: episode
 youtube_id: 6m_UrMIN3rI
-title: Jack Maynard: The Untold Story: How Being Thrown Out The Jungle Changed My Life Forever | E71
+title: "Jack Maynard: The Untold Story: How Being Thrown Out The Jungle Changed My Life Forever | E71"
 date: 2021-03-08
 guest: "[[people/jack-maynard]]"
 host: "[[people/steven-bartlett]]"

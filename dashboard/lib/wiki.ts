@@ -238,9 +238,13 @@ export function loadWiki(wikiDir: string): Map<string, WikiPage> {
     for (const entry of entries) {
       if (!entry.endsWith(".md")) continue;
       const filePath = path.join(dirPath, entry);
-      const page = parsePage(filePath);
-      // For episodes, slug comes from youtube_id (fm field); for others from fm.slug.
-      // If slug is empty fall back to filename without extension.
+      let page;
+      try {
+        page = parsePage(filePath);
+      } catch {
+        console.warn(`wiki: skipping ${filePath} (YAML parse error)`);
+        continue;
+      }
       const slug = page.slug || path.basename(entry, ".md");
       const key = `${typeName}/${slug}`;
       pages.set(key, { ...page, type: typeName, slug });

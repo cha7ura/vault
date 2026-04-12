@@ -2,7 +2,7 @@
 ---
 type: episode
 youtube_id: R0ibd_SSXH0
-title: World Leading Sex Therapist: How To Avoid Having Bad Sex: Kate Moyle | E73
+title: "World Leading Sex Therapist: How To Avoid Having Bad Sex: Kate Moyle | E73"
 date: 2021-03-22
 guest: "[[people/kate-moyle]]"
 host: "[[people/steven-bartlett]]"
