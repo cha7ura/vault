@@ -6,28 +6,48 @@ import asyncio
 import time
 
 from scripts.agents.config import DOAC_CHANNEL_SLUG, WIKI_DIR
-from scripts.agents.db import fetch_all, fetch_one
+from scripts.agents.db import fetch_all, get_channel_id
+from scripts.agents.stage0_enrich import enrich_guests
 from scripts.agents.stage1_prep import prep_episode
 from scripts.agents.stage2_clean import clean_episode
 from scripts.agents.stage3_extract import extract_episode
 from scripts.agents.stage3_enrich import run_enrichment
+from scripts.agents.stage3_lint import run_lint
 
 
-def get_episodes(channel_slug: str) -> list[dict]:
-    """Fetch episodes ordered oldest → newest (chronological wiki accumulation)."""
-    channel = fetch_one("SELECT id FROM channels WHERE slug=%s", (channel_slug,))
-    if not channel:
-        raise ValueError(f"Channel not found: {channel_slug}")
-    return fetch_all(
-        """
+def get_episodes(
+    channel_slug: str,
+    youtube_ids: list[str] | None = None,
+    start: int = 0,
+    limit: int = 0,
+) -> list[dict]:
+    """Fetch episodes ordered oldest → newest (chronological wiki accumulation).
+
+    Selection precedence:
+      1. Explicit ``youtube_ids`` (returns in channel order, missing ids silently skipped)
+      2. Positional window [``start``, ``start`` + ``limit``)
+      3. All episodes for the channel
+    """
+    channel_id = get_channel_id(channel_slug)
+    query = """
         SELECT id, youtube_id, title, published_at, duration_seconds,
                intro_end_position, knowledge_processed_at, wiki_processed_at, speaker_map
         FROM episodes
         WHERE channel_id=%s
-        ORDER BY published_at NULLS LAST
-        """,
-        (channel["id"],),
-    )
+    """
+    params: list = [channel_id]
+    if youtube_ids:
+        query += " AND youtube_id = ANY(%s)"
+        params.append(list(youtube_ids))
+    query += " ORDER BY published_at NULLS LAST"
+    if not youtube_ids:
+        if limit:
+            query += " LIMIT %s"
+            params.append(limit)
+        if start:
+            query += " OFFSET %s"
+            params.append(start)
+    return fetch_all(query, tuple(params))
 
 
 def seed_wiki() -> None:
@@ -40,6 +60,23 @@ def seed_wiki() -> None:
         print("  Wiki already seeded — skipping")
         return
     print("  Wiki seed pages missing — please run Task 2 (create wiki/ directory) first")
+
+
+def run_stage0(episodes: list[dict]) -> None:
+    """Stage 0 — web-enrich guest profiles via SearXNG, scoped to ``episodes``."""
+    print(f"\n{'='*60}")
+    print(f"STAGE 0 — ENRICH GUESTS ({len(episodes)} episodes)")
+    print(f"{'='*60}\n")
+    youtube_ids = [e["youtube_id"] for e in episodes]
+    enrich_guests(youtube_ids=youtube_ids)
+
+
+def run_stage_lint() -> None:
+    """Final pass — dedup, orphan detection, observation promotion over the whole wiki."""
+    print(f"\n{'='*60}")
+    print(f"STAGE 3 — LINT")
+    print(f"{'='*60}\n")
+    run_lint(WIKI_DIR)
 
 
 def run_stage1(episodes: list[dict]) -> dict:
@@ -116,30 +153,45 @@ def main():
     )
     parser.add_argument(
         "--stage",
-        choices=["prep", "clean", "extract", "enrich", "all"],
+        choices=["stage0", "prep", "clean", "extract", "enrich", "lint", "all"],
         default="all",
-        help="Which stage to run (default: all)",
+        help="Which stage to run (default: all → stage0 → prep → clean → extract → enrich → lint)",
     )
     parser.add_argument(
         "--limit", type=int, default=0,
-        help="Limit number of episodes to process (0 = all)",
+        help="Limit number of episodes (0 = all; applied after --start)",
+    )
+    parser.add_argument(
+        "--start", type=int, default=0,
+        help="Skip the first N episodes (0 = start from oldest)",
+    )
+    parser.add_argument(
+        "--youtube-ids", default="",
+        help="Comma-separated youtube_ids to scope the run (overrides --start/--limit)",
     )
     args = parser.parse_args()
 
-    episodes = get_episodes(args.channel)
-    if args.limit > 0:
-        episodes = episodes[:args.limit]
+    yids = [y for y in args.youtube_ids.split(",") if y] or None
+    episodes = get_episodes(
+        args.channel, youtube_ids=yids, start=args.start, limit=args.limit,
+    )
 
     print(f"Pipeline: {args.stage} | Channel: {args.channel} | Episodes: {len(episodes)}")
+    if episodes:
+        first = episodes[0]["youtube_id"]
+        last = episodes[-1]["youtube_id"]
+        print(f"Range: {first} → {last}")
 
     prep_results = {}
+
+    if args.stage in ("stage0", "all"):
+        run_stage0(episodes)
 
     if args.stage in ("prep", "all"):
         prep_results = run_stage1(episodes)
 
     if args.stage in ("clean", "all"):
         if not prep_results:
-            # Load prep results from DB (intro_end_position already saved)
             print("Loading prep results from DB...")
             for ep in episodes:
                 prep_results[ep["id"]] = {
@@ -162,6 +214,9 @@ def main():
 
     if args.stage in ("enrich", "all"):
         run_enrichment()
+
+    if args.stage in ("lint", "all"):
+        run_stage_lint()
 
     print(f"\n{'='*60}")
     print("Pipeline complete!")

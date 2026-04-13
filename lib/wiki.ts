@@ -315,27 +315,47 @@ export function buildGraph(pages: Map<string, WikiPage>): GraphData {
 // getBackrefs
 // ---------------------------------------------------------------------------
 
+// Reverse index: for a given pages Map, map `targetId → WikiPage[]`.
+// Memoized per Map instance via WeakMap so the full O(pages × outlinks)
+// scan runs once per wiki load instead of per request.
+const _backrefIndex: WeakMap<
+  Map<string, WikiPage>,
+  Map<string, WikiPage[]>
+> = new WeakMap();
+
+function buildBackrefIndex(
+  pages: Map<string, WikiPage>,
+): Map<string, WikiPage[]> {
+  const index = new Map<string, WikiPage[]>();
+  for (const page of pages.values()) {
+    for (const outlink of page.outlinks) {
+      const targetType = DIR_TO_TYPE[outlink.type] ?? outlink.type;
+      const key = `${targetType}/${outlink.slug}`;
+      let bucket = index.get(key);
+      if (!bucket) {
+        bucket = [];
+        index.set(key, bucket);
+      }
+      bucket.push(page);
+    }
+  }
+  return index;
+}
+
 /**
  * Return all pages whose outlinks reference the given targetId ("type/slug").
  * Outlinks store dir names (e.g. "people"), so we convert via DIR_TO_TYPE.
  */
 export function getBackrefs(
   targetId: string,
-  pages: Map<string, WikiPage>
+  pages: Map<string, WikiPage>,
 ): WikiPage[] {
-  const [targetType, targetSlug] = targetId.split("/");
-  const result: WikiPage[] = [];
-
-  for (const page of pages.values()) {
-    const matches = page.outlinks.some(
-      (o) =>
-        o.slug === targetSlug &&
-        (DIR_TO_TYPE[o.type] ?? o.type) === targetType
-    );
-    if (matches) result.push(page);
+  let index = _backrefIndex.get(pages);
+  if (!index) {
+    index = buildBackrefIndex(pages);
+    _backrefIndex.set(pages, index);
   }
-
-  return result;
+  return index.get(targetId) ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -388,5 +408,6 @@ export function getWiki(): Map<string, WikiPage> {
 }
 
 export function invalidateCache(): void {
+  if (_cache) _backrefIndex.delete(_cache);
   _cache = null;
 }

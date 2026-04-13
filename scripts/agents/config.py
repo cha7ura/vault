@@ -18,16 +18,19 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 
 # LLM provider priority: Groq > OpenRouter > Ollama
 if GROQ_API_KEY:
+    LLM_PROVIDER = "groq"
     LLM_BASE_URL = "https://api.groq.com/openai/v1"
     LLM_API_KEY = GROQ_API_KEY
     LLM_MODEL = GROQ_MODEL
     LLM_STRICT_JSON_SCHEMA = True
 elif OPENROUTER_API_KEY:
+    LLM_PROVIDER = "openrouter"
     LLM_BASE_URL = "https://openrouter.ai/api/v1"
     LLM_API_KEY = OPENROUTER_API_KEY
     LLM_MODEL = OPENROUTER_MODEL
     LLM_STRICT_JSON_SCHEMA = False
 else:
+    LLM_PROVIDER = "ollama"
     LLM_BASE_URL = f"{OLLAMA_BASE_URL}/v1"
     LLM_API_KEY = "ollama"
     LLM_MODEL = OLLAMA_MODEL

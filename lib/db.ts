@@ -188,15 +188,9 @@ export function parseVector(raw: unknown): number[] | null {
 // JSONB helper
 // ---------------------------------------------------------------------------
 
-/**
- * node-postgres auto-decodes jsonb columns. However, legacy rows inserted by
- * the pre-migration supabase-py code used `json.dumps()` before insert, so
- * the JSONB value is a *string* rather than an array/object. Use this
- * helper anywhere a JSONB column might still hold legacy-encoded data (e.g.
- * `yt_segments.words`):
- *
- *     const words = parseJsonb<Word[]>(row.words) ?? [];
- */
+// node-postgres auto-decodes JSONB, but some pre-migration rows stored the
+// payload as a literal JSON string (double-encoded). Parse those too so
+// callers see the decoded shape regardless of row vintage.
 export function parseJsonb<T = unknown>(raw: unknown): T | null {
   if (raw == null) return null;
   if (typeof raw === "string") {

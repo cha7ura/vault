@@ -12,71 +12,12 @@ from scripts.agents.config import (
     OPENROUTER_API_KEY,
     WIKI_EXTRACT_MODEL,
     WIKI_SUMMARY_MODEL,
-    groq_cost_usd,
 )
 from scripts.agents.db import log_llm_usage
+from scripts.agents.llm import log_llm_call as _log_call
 
 _GROQ_BASE = "https://api.groq.com/openai/v1"
 _OPENROUTER_BASE = "https://openrouter.ai/api/v1"
-
-
-def _log_call(
-    *,
-    episode_id: str | None,
-    stage: str,
-    provider: str,
-    model: str,
-    status_code: int,
-    payload: dict | None,
-    duration_ms: int,
-    error: str | None = None,
-) -> None:
-    """Extract usage from an API response and persist it to llm_usage.
-
-    Works for both providers:
-      - OpenRouter returns authoritative ``usage.cost`` when the request
-        includes ``usage: {include: true}``.
-      - Groq does not return cost, so we compute from tokens × price list.
-    """
-    usage = (payload or {}).get("usage") or {}
-    prompt_tokens = int(usage.get("prompt_tokens") or 0)
-    completion_tokens = int(usage.get("completion_tokens") or 0)
-    total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
-    reasoning_tokens = int(
-        ((usage.get("completion_tokens_details") or {}).get("reasoning_tokens")) or 0
-    )
-    cached_input_tokens = int(
-        ((usage.get("prompt_tokens_details") or {}).get("cached_tokens")) or 0
-    )
-    if provider == "openrouter":
-        cost_usd = float(usage.get("cost") or 0.0)
-    else:
-        cost_usd = groq_cost_usd(model, prompt_tokens, completion_tokens)
-
-    finish_reason = None
-    request_id = (payload or {}).get("id")
-    choices = (payload or {}).get("choices") or []
-    if choices:
-        finish_reason = choices[0].get("finish_reason")
-
-    log_llm_usage(
-        episode_id=episode_id,
-        stage=stage,
-        provider=provider,
-        model=model,
-        status_code=status_code,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        reasoning_tokens=reasoning_tokens,
-        cached_input_tokens=cached_input_tokens,
-        total_tokens=total_tokens,
-        cost_usd=cost_usd,
-        request_id=request_id,
-        finish_reason=finish_reason,
-        duration_ms=duration_ms,
-        error=error,
-        raw_usage=usage or None,
-    )
 
 _EMPTY = {"entities": [], "edges": [], "observations": []}
 
@@ -237,6 +178,8 @@ RULES:
 - The podcast show itself = Podcast
 
 - Check the INDEX below before naming entities. Use the CANONICAL NAME from the index if a match exists.
+- If an EPISODE block is provided, use ``podcast_name`` / ``podcast_slug`` verbatim for the Podcast entity and the Hosts/AppearsOn edges. NEVER emit "Unnamed Podcast" or invent a different show name. Use ``host_name`` for the podcast's host and ``guest_name`` as the primary guest for AppearsOn edges.
+- Use the ``youtube_id`` from the EPISODE block as the ``episode`` field on every edge and observation. Never emit the literal string "YOUTUBE_ID" or "unknown".
 - AffiliatedWith edges MUST include a role attribute (investor/founder/ceo/employee/advisor/board_member).
 - For Claims edges, include insight_type (claim/advice/tip/warning) and timestamp if available.
 - Do NOT invent new edge types. Use RelatesTo as the fallback.
@@ -308,8 +251,14 @@ def extract_chunk_json(
     chunk_text: str,
     index_content: str,
     episode_id: str | None = None,
+    episode_meta: dict | None = None,
 ) -> dict:
     """Call Groq to extract entities/edges from a transcript chunk.
+
+    ``episode_meta`` should carry known metadata (youtube_id, title,
+    published_at, guest_name, podcast_name, podcast_slug, host_name). When
+    present it is prefixed to ``user_content`` so the LLM never has to guess
+    the show name and never falls back to ``[[podcasts/unnamed-podcast]]``.
 
     Returns extraction dict with keys: entities, edges, observations.
     Returns empty structure on any error (pipeline continues).
@@ -318,7 +267,19 @@ def extract_chunk_json(
         print("  WARN: GROQ_API_KEY not set — skipping extraction")
         return dict(_EMPTY)
 
-    user_content = f"INDEX:\n{index_content}\n\nTRANSCRIPT:\n{chunk_text}"
+    meta_lines = []
+    if episode_meta:
+        for key in ("youtube_id", "title", "published_at", "guest_name",
+                    "host_name", "podcast_name", "podcast_slug"):
+            val = episode_meta.get(key)
+            if val:
+                meta_lines.append(f"{key}: {val}")
+    episode_block = "EPISODE:\n" + "\n".join(meta_lines) + "\n\n" if meta_lines else ""
+
+    user_content = (
+        f"{episode_block}"
+        f"INDEX:\n{index_content}\n\nTRANSCRIPT:\n{chunk_text}"
+    )
     t0 = time.monotonic()
     try:
         resp = requests.post(
@@ -340,8 +301,13 @@ def extract_chunk_json(
                     {"role": "user", "content": user_content},
                 ],
                 "temperature": 0,
+                # Give the strict JSON generator enough headroom to finish the
+                # document. Groq's default cap truncates dense chunks mid-array
+                # and produces `max completion tokens reached` 400s that can't
+                # be recovered (the partial is unparseable).
+                "max_completion_tokens": 8192,
             },
-            timeout=60,
+            timeout=120,
         )
     except requests.RequestException as e:
         duration_ms = int((time.monotonic() - t0) * 1000)

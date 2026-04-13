@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -42,6 +43,52 @@ def slugify(name: str) -> str:
     s = name.lower()
     s = re.sub(r"[^a-z0-9]+", "-", s)
     return s.strip("-")
+
+
+_TIMESTAMP_RANGE = re.compile(r"^\s*([^-\u2013\u2014]+?)\s*[-\u2013\u2014].+$")
+_TIMESTAMP_SECONDS = re.compile(r"^(\d+(?:\.\d+)?)\s*s?$")
+_TIMESTAMP_CLOCK = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,]\d+)?$")
+
+
+def canonical_timestamp(raw: Any) -> str:
+    """Normalize an LLM-emitted timestamp to ``HH:MM:SS``.
+
+    Accepts bare seconds (``3534`` / ``3534s``), clock format (``3:49``,
+    ``58:54``, ``1:01:40``), and ranges (``1298s-1300s`` → start of range).
+    Returns the original string unchanged if it doesn't parse — we'd rather
+    preserve odd input than lose it.
+    """
+    if raw is None:
+        return ""
+    text = str(raw).strip()
+    if not text:
+        return ""
+    # Range → take the first endpoint ("1298s-1300s" → "1298s")
+    m = _TIMESTAMP_RANGE.match(text)
+    if m:
+        text = m.group(1).strip()
+
+    seconds: float | None = None
+    m = _TIMESTAMP_SECONDS.match(text)
+    if m:
+        seconds = float(m.group(1))
+    else:
+        m = _TIMESTAMP_CLOCK.match(text)
+        if m:
+            a, b, c = m.group(1), m.group(2), m.group(3)
+            if c is not None:
+                # H:M:S
+                seconds = int(a) * 3600 + int(b) * 60 + int(c)
+            else:
+                # M:S (short form)
+                seconds = int(a) * 60 + int(b)
+
+    if seconds is None or seconds < 0:
+        return str(raw).strip()
+    total = int(seconds)
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
 
 def sanitize_slug(slug: str) -> str:
@@ -117,13 +164,31 @@ def _append_index_row(wiki_dir: Path, name: str, entity_type: str, file_path: st
         f.write(row)
 
 
-def _edge_key_for(entity: dict, edge: dict) -> tuple[str, str]:
-    """Return (edge_relationship_key, wikilink_target) for an edge from entity."""
+def _edge_key_for(
+    entity: dict,
+    edge: dict,
+    index: dict | None = None,
+) -> tuple[str, str]:
+    """Return (edge_relationship_key, wikilink_target) for an edge from entity.
+
+    When ``index`` is provided, resolve the target wikilink against it first
+    so "Not On The High Street" re-uses the existing
+    ``organizations/not-in-the-high-street`` page instead of creating a
+    slug twin. Fuzzy matches are accepted at the same cutoff as page merges.
+    """
     edge_key = EDGE_TYPE_TO_KEY.get(edge["type"], "relates_to")
-    target_dir = ENTITY_TYPE_TO_DIR.get(edge["to_type"], "_unknown")
-    target_slug = slugify(edge["to_name"])
-    wikilink = f"[[{target_dir}/{target_slug}]]"
-    return edge_key, wikilink
+    target_type = edge.get("to_type") or ""
+    target_dir = ENTITY_TYPE_TO_DIR.get(target_type, "_unknown")
+    target_name = edge.get("to_name") or ""
+
+    if index and target_name and target_type:
+        resolved = _find_existing_slug(target_name, target_type, index)
+        if resolved:
+            existing_slug = resolved[0].removesuffix(".md")
+            return edge_key, f"[[{target_dir}/{existing_slug}]]"
+
+    target_slug = slugify(target_name)
+    return edge_key, f"[[{target_dir}/{target_slug}]]"
 
 
 def _edge_is_duplicate(existing_edges: list[dict], new_edge_attrs: dict) -> bool:
@@ -193,6 +258,83 @@ def _find_existing_slug(
     return None
 
 
+_SOURCES_HEADER = "## Sources"
+
+
+_PERSON_SOURCES_CACHE: dict[str, list[dict]] = {}
+
+
+def _fetch_person_sources(name: str) -> list[dict]:
+    """Return people.sources for the given name, empty list if missing.
+
+    Memoized per process: stage0_enrich writes to people.sources before the
+    wiki pipeline runs, so the table is stable for the duration of an
+    extraction. This cuts the `merge_to_wiki` N-chunks × M-person-pages
+    re-query storm down to one lookup per unique (lowercased) name.
+    """
+    key = name.strip().lower()
+    if key in _PERSON_SOURCES_CACHE:
+        return _PERSON_SOURCES_CACHE[key]
+    from scripts.agents.db import fetch_one
+    row = fetch_one(
+        "SELECT sources FROM people WHERE lower(name) = %s LIMIT 1",
+        (key,),
+    )
+    sources: list[dict] = []
+    raw = (row or {}).get("sources")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            raw = None
+    if isinstance(raw, list):
+        sources = raw
+    _PERSON_SOURCES_CACHE[key] = sources
+    return sources
+
+
+def clear_person_sources_cache() -> None:
+    """Drop memoized sources — call after stage0_enrich updates people.sources."""
+    _PERSON_SOURCES_CACHE.clear()
+
+
+def _render_sources_block(sources: list[dict]) -> str:
+    """Render a `## Sources` markdown section from people.sources entries.
+
+    Deduped by URL. Each line: ``- [title](url) — snippet`` (snippet truncated).
+    """
+    if not sources:
+        return ""
+    seen: set[str] = set()
+    lines = [_SOURCES_HEADER]
+    for s in sources:
+        url = (s.get("url") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        title = (s.get("title") or url).strip()
+        snippet = (s.get("snippet") or "").strip()
+        line = f"- [{title}]({url})"
+        if snippet:
+            # Keep lines readable — truncate snippet aggressively
+            short = snippet[:140].rsplit(" ", 1)[0] if len(snippet) > 140 else snippet
+            line += f" — {short}"
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def _upsert_sources_in_body(body: str, sources_block: str) -> str:
+    """Replace an existing `## Sources` section with ``sources_block``, or
+    append when not present. Empty ``sources_block`` leaves the body alone."""
+    if not sources_block:
+        return body
+    idx = body.find(_SOURCES_HEADER)
+    if idx == -1:
+        sep = "\n\n" if body.strip() else ""
+        return f"{body.rstrip()}{sep}{sources_block}".lstrip()
+    return (body[:idx].rstrip() + "\n\n" + sources_block).lstrip()
+
+
 def _merge_entity_page(
     entity: dict,
     edges_for_entity: list[dict],
@@ -251,10 +393,12 @@ def _merge_entity_page(
     # Merge edges into relationships
     rels = fm.setdefault("relationships", {})
     for edge in edges_for_entity:
-        edge_key, wikilink = _edge_key_for(entity, edge)
+        edge_key, wikilink = _edge_key_for(entity, edge, index=index)
         edge_attrs = dict(edge.get("attributes") or {})
         edge_attrs["entity"] = wikilink
         edge_attrs["episode"] = edge.get("episode", youtube_id)
+        if "timestamp" in edge_attrs:
+            edge_attrs["timestamp"] = canonical_timestamp(edge_attrs["timestamp"])
         existing = rels.setdefault(edge_key, [])
         if not _edge_is_duplicate(existing, edge_attrs):
             existing.append(edge_attrs)
@@ -264,7 +408,7 @@ def _merge_entity_page(
     for obs in observations_for_entity:
         obs_entry = {
             "episode": obs.get("episode", youtube_id),
-            "timestamp": obs.get("timestamp", ""),
+            "timestamp": canonical_timestamp(obs.get("timestamp", "")),
             "text": obs.get("text", ""),
         }
         # Dedup by text
@@ -279,26 +423,26 @@ def _merge_entity_page(
         if len(parts) == 3:
             existing_body = parts[2].strip()
 
+    # Render ## Sources section from stage0_enrich data (Person pages only)
+    if entity_type == "Person":
+        sources = _fetch_person_sources(fm.get("name") or name)
+        block = _render_sources_block(sources)
+        existing_body = _upsert_sources_in_body(existing_body, block)
+
     save_page(page_path, fm, existing_body)
 
     # Add to index if new; if this was a fuzzy merge, register the alias so
     # subsequent chunks in the same batch resolve to the same page.
     if name.lower() not in index:
         file_ref = f"{ENTITY_TYPE_TO_DIR.get(entity_type, '_unknown')}/{slug}"
-        if alias_to_add:
-            # Fuzzy-merged into an existing page — point this spelling at it
-            index[name.lower()] = {
-                "type": entity_type.lower(),
-                "file": file_ref,
-                "aliases": [],
-            }
-        else:
+        # Fuzzy merges reuse an existing page, so don't append a new index row
+        if not alias_to_add:
             _append_index_row(wiki_dir, name, entity_type, file_ref, fm.get("aliases", []))
-            index[name.lower()] = {
-                "type": entity_type.lower(),
-                "file": file_ref,
-                "aliases": [],
-            }
+        index[name.lower()] = {
+            "type": entity_type.lower(),
+            "file": file_ref,
+            "aliases": [],
+        }
 
     return page_path
 

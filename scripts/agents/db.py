@@ -280,3 +280,11 @@ def parse_json(raw: Any) -> Any:
     if raw is None or not isinstance(raw, str):
         return raw
     return json.loads(raw)
+
+
+def get_channel_id(slug: str) -> int:
+    """Look up channel id by slug, raising ValueError if missing."""
+    row = fetch_one("SELECT id FROM channels WHERE slug=%s", (slug,))
+    if not row:
+        raise ValueError(f"Channel not found: {slug}")
+    return row["id"]
